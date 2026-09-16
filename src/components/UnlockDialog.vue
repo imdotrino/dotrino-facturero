@@ -2,16 +2,16 @@
 import { reactive } from 'vue'
 import { unlockSignature } from '../lib/signature.js'
 
-const prompt = reactive({ open: false, busy: false, error: '', fingerprint: '', holder: '', resolve: null })
+const prompt = reactive({ open: false, busy: false, error: '', issuerId: '', holder: '', resolve: null })
 
 /**
- * Pide la contraseña de UNA firma y la desbloquea. Resuelve `true` si se desbloqueó y
- * `false` si se canceló.
- * @param {{ fingerprint: string, info: { holder: string } }} signature
+ * Pide la contraseña de la firma de UN emisor y la desbloquea. Resuelve `true` si se
+ * desbloqueó y `false` si se canceló.
+ * @param {{ issuerId: string, info: { holder: string } }} signature
  */
 export function requestUnlock (signature) {
   return new Promise((resolve) => {
-    Object.assign(prompt, { open: true, busy: false, error: '', fingerprint: signature.fingerprint, holder: signature.info.holder, resolve })
+    Object.assign(prompt, { open: true, busy: false, error: '', issuerId: signature.issuerId, holder: signature.info.holder, resolve })
   })
 }
 </script>
@@ -45,7 +45,7 @@ async function submit () {
   prompt.busy = true
   prompt.error = ''
   try {
-    await unlockSignature(prompt.fingerprint, password.value)
+    await unlockSignature(prompt.issuerId, password.value)
     finish(true)
   } catch (e) {
     console.error('[facturero] unlock:', e)

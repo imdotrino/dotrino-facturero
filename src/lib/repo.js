@@ -1,14 +1,14 @@
 // Qué guarda la app en el almacén del usuario y con qué forma.
 //
-//   facturero.settings            { id: 'issuer:<uuid>', … }        un emisor: RUC, serie, ambiente,
-//                                                                     siguiente secuencial y su firma
-//                                 { id: 'signature:<huella>', … }   una firma electrónica, SELLADA
-//                                 { id: 'draft', draft }            la factura a medio escribir
+//   facturero.settings            { id: 'issuer:<uuid>', … }      un emisor: RUC, serie, ambiente y
+//                                                                   siguiente secuencial
+//                                 { id: 'signature:<uuid>', … }   la firma electrónica DE ESE emisor,
+//                                                                   SELLADA (mismo uuid)
+//                                 { id: 'draft', draft }          la factura a medio escribir
 //   facturero.invoices.aaaa-mm-dd una entrada por factura; id = clave de acceso
 //
-// Puede haber varios emisores (varios RUC, cada uno en pruebas o en producción) y varias
-// firmas; cada emisor dice con qué firma se firma. Una misma firma sirve a varios emisores:
-// quien firma suele ser la misma persona.
+// Puede haber varios emisores (varios RUC, cada uno en pruebas o en producción), y cada uno
+// lleva SU firma: se carga con el emisor y se va con él.
 //
 // Las facturas van en un hilo POR DÍA de emisión, las de todos los emisores juntas (cada
 // una lleva su `issuerId` y una copia del emisor tal como estaba al emitirla). El almacén
@@ -38,7 +38,6 @@ export const EMPTY_ISSUER = Object.freeze({
   withholdingAgent: '',
   rimpe: '',
   environment: '1',
-  signature: '',
 })
 
 async function settings () {
@@ -80,28 +79,29 @@ export async function saveIssuer (issuer) {
   return { ...data, id: issuerId }
 }
 
-export function removeIssuer (issuerId) {
+/** Quita el emisor y su firma. Las facturas ya emitidas se quedan (llevan su copia). */
+export async function removeIssuer (issuerId) {
+  await removeSetting(SIGNATURE_PREFIX + issuerId)
   return removeSetting(ISSUER_PREFIX + issuerId)
 }
 
-// ---------- firmas ----------
+// ---------- la firma de cada emisor ----------
 
+/** Registros de firma, cada uno con el `issuerId` al que pertenece. */
 export async function listSignatureRecords () {
-  return (await settings()).filter((e) => e.id.startsWith(SIGNATURE_PREFIX))
+  return (await settings())
+    .filter((e) => e.id.startsWith(SIGNATURE_PREFIX))
+    .map((e) => ({ ...e, issuerId: e.id.slice(SIGNATURE_PREFIX.length) }))
 }
 
-export async function getSignatureRecord (fingerprint) {
-  const e = (await settings()).find((x) => x.id === SIGNATURE_PREFIX + fingerprint)
-  if (!e) throw codeError('no-signature', `there is no saved signature ${fingerprint}`)
+export async function getSignatureRecord (issuerId) {
+  const e = (await settings()).find((x) => x.id === SIGNATURE_PREFIX + issuerId)
+  if (!e) throw codeError('no-signature', `the issuer ${issuerId} has no signature`)
   return e
 }
 
-export function saveSignatureRecord (record) {
-  return writeSetting(SIGNATURE_PREFIX + record.info.fingerprint, record)
-}
-
-export function removeSignatureRecord (fingerprint) {
-  return removeSetting(SIGNATURE_PREFIX + fingerprint)
+export function saveSignatureRecord (issuerId, { envelope, sealedBy, info, fileName }) {
+  return writeSetting(SIGNATURE_PREFIX + issuerId, { envelope, sealedBy, info, fileName })
 }
 
 // ---------- borrador ----------

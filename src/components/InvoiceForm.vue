@@ -145,8 +145,8 @@ async function submit () {
     toast(t('errors.invalid-draft'), 'error')
     return
   }
-  if (!currentSigner(issuer.value.signature)) {
-    const signature = state.signatures.find((s) => s.fingerprint === issuer.value.signature)
+  if (!currentSigner(issuer.value.id)) {
+    const signature = state.signatures.find((s) => s.issuerId === issuer.value.id)
     const unlocked = await requestUnlock(signature)
     if (!unlocked) return
   }

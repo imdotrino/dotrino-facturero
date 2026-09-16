@@ -34,7 +34,7 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 
 ### La firma electrónica
 
-- El `.p12` se guarda **sellado** con la llave de cifrado del perfil
+- El `.p12` de cada emisor se guarda **sellado** con la llave de cifrado del perfil
   (`id.encrypt` para uno mismo, con verificación de apertura antes de guardar).
 - **La contraseña no se guarda nunca.** Desbloquear deja en memoria una `CryptoKey` no
   extraíble. Recargar vuelve a cerrarla.
@@ -43,18 +43,23 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 - forge no abría un `.p12` AES (el formato por defecto de OpenSSL 3) con contraseñas con
   ñ o tildes. PBES2 usa UTF-8 y el MAC usa BMPString (RFC 7292 B.1). `readP12` lo corrige.
 
-### Emisores y firmas
+### Emisores, cada uno con su firma
 
 - **Varios emisores:** un RUC, una serie (establecimiento + punto de emisión) y un ambiente
-  (pruebas o producción). Cada uno lleva su propio secuencial y dice con qué firma factura.
+  (pruebas o producción), con su propio secuencial.
+- **Una firma por emisor.** Se carga en el mismo formulario del emisor y se guarda como
+  `signature:<issuerId>`. Se desbloquea por emisor y se borra con él.
+  - El archivo se abre con su contraseña **antes** de guardar el emisor: una contraseña
+    equivocada no deja un emisor a medias.
+  - **Duplicar** copia también la firma ya sellada (útil para sacar producción de pruebas),
+    y en la copia se puede reemplazar.
 - **Qué emisor se usa:** se elige al facturar (`draft.issuerId`), y el borrador lo recuerda.
-- **Firmas:** van en otra lista. Una firma sirve a varios emisores, y cada una se desbloquea
-  por separado.
 - **Series repetidas:** no se pueden guardar dos emisores con el mismo RUC, serie y ambiente
   (`duplicate-series`). Tendrían dos contadores para la misma numeración y el SRI rechazaría
   la segunda factura (45).
-- **Copia del emisor:** cada factura guarda su `issuerId` y una copia del emisor al emitirla.
-  Si luego se edita o se borra el emisor, el RIDE sigue saliendo con los datos originales.
+- **Copia del emisor en la factura:** cada factura guarda su `issuerId` y una copia del emisor
+  al emitirla. Si luego se edita o se borra el emisor, el RIDE sigue saliendo con los datos
+  originales.
 - Las reglas sobre la lista de emisores viven en `src/lib/issuers.js`, sin almacén ni interfaz.
 
 ### Almacén

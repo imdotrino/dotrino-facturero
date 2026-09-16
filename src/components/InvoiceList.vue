@@ -74,8 +74,7 @@ onMounted(load)
   <section class="stack" data-testid="invoice-list">
     <div v-if="usableIssuers().length === 0" class="card readiness" data-testid="readiness">
       <p v-if="state.issuers.length === 0">{{ t('ready.noIssuer') }}</p>
-      <p v-if="state.signatures.length === 0">{{ t('ready.noSignature') }}</p>
-      <p v-if="state.issuers.length && state.signatures.length">{{ t('ready.noUsableIssuer') }}</p>
+      <p v-else>{{ t('ready.noUsableIssuer') }}</p>
       <button class="btn primary" data-testid="go-settings" @click="emit('settings')">{{ t('ready.goSettings') }}</button>
     </div>
 

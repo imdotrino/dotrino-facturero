@@ -36,7 +36,7 @@ async function prepare (issuerId, draft) {
   const issuers = await listIssuers()
   const issuer = issuers.find((i) => i.id === issuerId)
   if (!issuer) throw codeError('issuer-not-found', `there is no issuer ${issuerId}`)
-  const signatures = (await listSignatureRecords()).map((r) => ({ fingerprint: r.info.fingerprint }))
+  const signatures = await listSignatureRecords()
   const seen = new Set()
   const problems = [...issuerProblems(issuer, { issuers, signatures }), ...validate(draft, issuer)]
     .filter((p) => { const k = p.path + ':' + p.code; if (seen.has(k)) return false; seen.add(k); return true })
@@ -44,8 +44,8 @@ async function prepare (issuerId, draft) {
 }
 
 function signerFor (issuer) {
-  const signer = currentSigner(issuer.signature)
-  if (!signer) throw codeError('signature-locked', `the signature ${issuer.signature} is locked`, { fingerprint: issuer.signature })
+  const signer = currentSigner(issuer.id)
+  if (!signer) throw codeError('signature-locked', `the signature of issuer ${issuer.id} is locked`, { issuerId: issuer.id })
   return signer
 }
 

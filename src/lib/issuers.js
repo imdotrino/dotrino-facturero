@@ -16,17 +16,22 @@ export function sameSeries (a, b) {
     a.emissionPoint === b.emissionPoint && a.environment === b.environment
 }
 
-/**
- * Lo que impide usar un emisor para facturar: sus datos, la firma que tiene asignada y que
- * no repita la serie de otro. `[{ path, code }]`.
- */
-export function issuerProblems (issuer, { issuers = [], signatures = [] } = {}) {
+/** Los datos del emisor y que no repita la serie de otro. `[{ path, code }]`. */
+export function issuerDataProblems (issuer, issuers = []) {
   const problems = []
   const add = (path, code) => problems.push({ path, code })
   validateIssuer({ ...issuer, nextSequential: Number(issuer.nextSequential) }, add)
-  if (!issuer.signature) add('issuer.signature', 'required')
-  else if (!signatures.some((s) => s.fingerprint === issuer.signature)) add('issuer.signature', 'signature-missing')
   if (issuers.some((other) => other.id !== issuer.id && sameSeries(other, issuer))) add('issuer.establishment', 'duplicate-series')
+  return problems
+}
+
+/**
+ * Lo que impide facturar con un emisor: sus datos, la serie, y que tenga su firma cargada.
+ * `signatures` son las firmas guardadas, cada una con su `issuerId`.
+ */
+export function issuerProblems (issuer, { issuers = [], signatures = [] } = {}) {
+  const problems = issuerDataProblems(issuer, issuers)
+  if (!signatures.some((s) => s.issuerId === issuer.id)) problems.push({ path: 'issuer.signature', code: 'required' })
   return problems
 }
 

@@ -3,24 +3,38 @@ import { ref, reactive, computed } from 'vue'
 import { t, errorText, lang } from '../i18n.js'
 import { toast } from '../state.js'
 import { EMPTY_ISSUER, saveIssuer } from '../lib/repo.js'
-import { issuerProblems } from '../lib/issuers.js'
+import { issuerDataProblems, issuerName } from '../lib/issuers.js'
+import { openSignatureFile, attachSignature, copySignature } from '../lib/signature.js'
 import { cleanText } from '../sri/invoice.js'
 
 const props = defineProps({
-  issuer: { type: Object, default: null },       // null = nuevo
+  issuer: { type: Object, default: null },        // null = nuevo
+  copyFrom: { type: Object, default: null },      // emisor original al duplicar
   issuers: { type: Array, required: true },
   signatures: { type: Array, required: true },
 })
 const emit = defineEmits(['saved', 'cancel'])
 
-const initial = props.issuer
-  ? { ...EMPTY_ISSUER, ...props.issuer }
-  // Con una sola firma cargada, un emisor nuevo nace con ella elegida.
-  : { ...EMPTY_ISSUER, signature: props.signatures.length === 1 ? props.signatures[0].fingerprint : '' }
-const form = reactive(initial)
+const form = reactive({ ...EMPTY_ISSUER, ...(props.issuer || {}) })
 const saving = ref(false)
 const showProblems = ref(false)
 const info = ref(false)
+
+// La firma: la que ya tiene el emisor, o la del original si es una copia. Si no hay
+// ninguna, o se pide reemplazarla, se carga un archivo.
+const current = computed(() => props.signatures.find((s) => s.issuerId === props.issuer?.id) || null)
+const source = computed(() => props.copyFrom ? props.signatures.find((s) => s.issuerId === props.copyFrom.id) || null : null)
+const kept = computed(() => current.value || source.value)
+const replacing = ref(false)
+const needsFile = computed(() => !kept.value || replacing.value)
+const file = ref(null)
+const password = ref('')
+const signatureError = ref('')
+
+function onFile (e) {
+  file.value = e.target.files?.[0] || null
+  signatureError.value = ''
+}
 
 function normalized () {
   return {
@@ -38,24 +52,42 @@ function normalized () {
   }
 }
 
-const problems = computed(() => issuerProblems(normalized(), { issuers: props.issuers, signatures: props.signatures }))
+const problems = computed(() => [
+  ...issuerDataProblems(normalized(), props.issuers),
+  ...(needsFile.value && !(file.value && password.value) ? [{ path: 'issuer.signature', code: 'required' }] : []),
+])
 const problemAt = (field) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === `issuer.${field}`)
   return p ? t(`problems.${p.code}`) : ''
 }
 
-const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'medium' }).format(new Date(iso))
+const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'long' }).format(new Date(iso))
 
 async function submit () {
   showProblems.value = true
+  signatureError.value = ''
   if (problems.value.length) {
     toast(t('errors.invalid-draft'), 'error')
     return
   }
   saving.value = true
   try {
+    // Primero se abre el archivo: con la contraseña equivocada no se guarda nada.
+    let opened = null
+    if (needsFile.value) {
+      try {
+        opened = await openSignatureFile(file.value, password.value)
+      } catch (e) {
+        console.error('[facturero] open signature:', e)
+        signatureError.value = errorText(e)
+        return
+      }
+    }
     const saved = await saveIssuer(normalized())
+    if (opened) await attachSignature(saved.id, opened)
+    else if (!current.value && source.value) await copySignature(props.copyFrom.id, saved.id)
+    password.value = ''
     emit('saved', saved)
   } catch (e) {
     console.error('[facturero] save issuer:', e)
@@ -119,15 +151,6 @@ async function submit () {
         <small v-if="info" class="info-text">{{ t('settings.nextSequentialInfo') }}</small>
         <small v-if="problemAt('nextSequential')" class="problem">{{ problemAt('nextSequential') }}</small>
       </div>
-      <label class="field wide">
-        <span>{{ t('settings.signatureForIssuer') }}</span>
-        <select v-model="form.signature" :disabled="signatures.length === 0" data-testid="issuer-signature">
-          <option value="">{{ t('settings.chooseSignature') }}</option>
-          <option v-for="s in signatures" :key="s.fingerprint" :value="s.fingerprint">{{ s.info.holder }} · {{ t('settings.validTo') }} {{ fmtDate(s.info.validTo) }}</option>
-        </select>
-        <small v-if="signatures.length === 0" class="muted">{{ t('settings.noSignaturesYet') }}</small>
-        <small v-if="problemAt('signature')" class="problem">{{ problemAt('signature') }}</small>
-      </label>
       <label class="field check wide">
         <input v-model="form.keepsAccounting" type="checkbox" data-testid="issuer-keeps-accounting" />
         <span>{{ t('settings.keepsAccounting') }}</span>
@@ -150,6 +173,35 @@ async function submit () {
           <option value="popular">{{ t('settings.rimpePopular') }}</option>
         </select>
       </label>
+
+      <div class="field wide sub-card" data-testid="issuer-signature">
+        <span class="label-row">{{ t('settings.signature') }}</span>
+        <template v-if="kept && !replacing">
+          <p data-testid="issuer-signature-kept">
+            <strong>{{ kept.info.holder }}</strong> · {{ t('settings.validTo') }} {{ fmtDate(kept.info.validTo) }}
+          </p>
+          <p v-if="!current && source" class="muted small">{{ t('settings.signatureCopied', { name: issuerName(copyFrom) }) }}</p>
+          <div class="actions wrap">
+            <button type="button" class="btn small" data-testid="replace-signature" @click="replacing = true">{{ t('settings.replaceSignature') }}</button>
+          </div>
+        </template>
+        <template v-else>
+          <label class="field">
+            <span>{{ t('settings.file') }}</span>
+            <input type="file" accept=".p12,.pfx,application/x-pkcs12" data-testid="signature-file" @change="onFile" />
+          </label>
+          <label class="field">
+            <span>{{ t('settings.password') }}</span>
+            <input v-model="password" type="password" autocomplete="off" data-testid="signature-password" />
+          </label>
+          <small class="info-text">{{ t('settings.passwordNotStored') }}</small>
+          <div v-if="kept" class="actions wrap">
+            <button type="button" class="btn small ghost" @click="replacing = false; file = null; password = ''">{{ t('settings.keepSignature') }}</button>
+          </div>
+        </template>
+        <small v-if="problemAt('signature')" class="problem">{{ problemAt('signature') }}</small>
+        <p v-if="signatureError" class="problem" role="alert" data-testid="signature-error">{{ signatureError }}</p>
+      </div>
     </fieldset>
     <div class="actions">
       <button type="button" class="btn ghost" :disabled="saving" data-testid="cancel-issuer" @click="emit('cancel')">{{ t('form.cancel') }}</button>
