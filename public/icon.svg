@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#00658c"/>
+  <!-- documento (dentro de la zona segura del icono maskable) -->
+  <path d="M150 104h160l72 72v232a24 24 0 0 1-24 24H150a24 24 0 0 1-24-24V128a24 24 0 0 1 24-24z" fill="#f7fafc"/>
+  <path d="M310 104v48a24 24 0 0 0 24 24h48z" fill="#72c1f0"/>
+  <rect x="166" y="206" width="132" height="18" rx="9" fill="#72c1f0"/>
+  <rect x="166" y="246" width="180" height="18" rx="9" fill="#bfc8cf"/>
+  <rect x="166" y="286" width="150" height="18" rx="9" fill="#bfc8cf"/>
+  <!-- sello de autorizado -->
+  <circle cx="330" cy="360" r="68" fill="#006b5c"/>
+  <path d="M298 360l22 22 44-46" fill="none" stroke="#96f4de" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

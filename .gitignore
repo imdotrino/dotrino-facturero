@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.claude/
+*.local
+.DS_Store
+*.log
+.env
+# Firmas electrónicas: nunca al repo, ni siquiera las de prueba.
+*.p12
+*.pfx

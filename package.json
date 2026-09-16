@@ -1,0 +1,37 @@
+{
+  "name": "facturero",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Facturación electrónica contra el SRI de Ecuador desde el navegador: la firma se usa en el aparato y las facturas se guardan en el almacén del usuario (ecosistema Dotrino).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "vite build && node --test --test-concurrency=1 test/e2e/*.e2e.mjs"
+  },
+  "dependencies": {
+    "@dotrino/identity": "0.90.0",
+    "@dotrino/install": "0.3.1",
+    "@dotrino/nav": "0.3.0",
+    "@dotrino/reputation": "0.12.0",
+    "@dotrino/store": "0.8.0",
+    "@dotrino/topbar": "0.10.0",
+    "node-forge": "1.4.0",
+    "vue": "3.5.25"
+  },
+  "overrides": {
+    "@dotrino/store": "0.8.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "2.3.0",
+    "@vitejs/plugin-vue": "6.0.2",
+    "@xmldom/xmldom": "0.9.12",
+    "playwright": "1.62.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vite-plugin-pwa": "1.2.0",
+    "xml-crypto": "6.1.2"
+  }
+}
