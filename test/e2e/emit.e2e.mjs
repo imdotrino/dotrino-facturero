@@ -28,6 +28,8 @@ const TYPES = {
 }
 const PASSWORD = 'clave ñ 1'
 
+const IMPORT_FIXTURES = fileURLToPath(new URL('../fixtures/import/', import.meta.url))
+
 const pki = makePki({ leaves: [{ name: 'FIRMA DE PRUEBA FACTURERO', keyUsage: 'digitalSignature,nonRepudiation' }] })
 const dir = await mkdtemp(join(tmpdir(), 'facturero-e2e-'))
 const p12Path = join(dir, 'firma.p12')
@@ -124,6 +126,61 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await newBuyer.getByTestId('save-buyer').click()
   await page.getByTestId('buyer-item').filter({ hasText: 'Juan Pérez' }).waitFor()
 
+  // --- importar desde Facturero Móvil (archivos sintéticos con la forma de los reportes)
+  await page.getByTestId('tab-import').click()
+  const clients = page.getByTestId('import-buyers')
+  await clients.getByTestId('import-file').setInputFiles(join(IMPORT_FIXTURES, 'clientes-pequeno.xls'))
+  await clients.getByTestId('import-preview').waitFor()
+  // Juan ya estaba registrado; entran dos, dos no (sin correo y correo malo) y consumidor
+  // final se omite.
+  assert.match(await clients.getByTestId('import-summary').innerText(), /2 nuevos, 1 ya registrados, 3 que no entran/)
+  await clients.getByTestId('import-confirm').click()
+  await clients.getByTestId('import-done').filter({ hasText: '2' }).waitFor()
+  const goods = page.getByTestId('import-products')
+  await goods.getByTestId('import-file').setInputFiles(join(IMPORT_FIXTURES, 'bienes.xls'))
+  await goods.getByTestId('import-preview').waitFor()
+  assert.match(await goods.getByTestId('import-summary').innerText(), /2 nuevos, 0 ya registrados, 4 que no entran/)
+  await goods.getByTestId('import-confirm').click()
+  await goods.getByTestId('import-done').filter({ hasText: '2' }).waitFor()
+  await page.getByTestId('tab-products').click()
+  await page.getByTestId('product-item').filter({ hasText: 'SRV-001' }).waitFor()
+  assert.equal(await page.getByTestId('product-item').count(), 2)
+
+  // --- pedir otro importador, con archivo: se intercepta el relevo (no sale ningún correo)
+  let relayed = null
+  await ctx.route('https://feedback.dotrino.com/**', async (route) => {
+    const req = route.request()
+    relayed = { headers: req.headers(), body: req.postDataBuffer() }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}', headers: { 'Access-Control-Allow-Origin': ORIGIN } })
+  })
+  await page.getByTestId('tab-import').click()
+  const request = page.getByTestId('request-importer')
+  await request.getByTestId('request-send').click()
+  await request.getByText('Obligatorio').first().waitFor()
+  const sample = join(dir, 'muestra.csv')
+  await writeFile(sample, 'codigo,nombre\n1,Cliente de otro sistema\n')
+  await request.getByTestId('request-text').fill('Necesito importar los clientes de mi sistema anterior')
+  await request.getByTestId('request-contact').fill('yo@example.com')
+  await request.getByTestId('request-file').setInputFiles(sample)
+  await request.getByTestId('request-send').click()
+  await request.getByTestId('request-sent').waitFor({ timeout: 20_000 })
+  assert.equal(relayed.headers['content-type'], 'application/octet-stream')
+  const meta = JSON.parse(Buffer.from(relayed.headers['x-dotrino-feedback'].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+  assert.equal(meta.text, 'Necesito importar los clientes de mi sistema anterior')
+  assert.equal(meta.contact, 'yo@example.com')
+  assert.equal(meta.filename, 'muestra.csv')
+  assert.equal(meta.app, 'facturero-importador')
+  assert.ok(meta.signature && meta.pubkey, 'the request goes signed by the profile')
+  assert.equal(relayed.body.toString('utf8'), 'codigo,nombre\n1,Cliente de otro sistema\n')
+  // Un archivo que pasa del tope ni se intenta enviar.
+  const big = join(dir, 'grande.pdf')
+  await writeFile(big, Buffer.alloc(5 * 1024 * 1024 + 1))
+  relayed = null
+  await request.getByTestId('request-file').setInputFiles(big)
+  await request.getByTestId('request-file-problem').filter({ hasText: '5 MB' }).waitFor()
+  await request.getByTestId('request-send').click()
+  assert.equal(relayed, null)
+
   // --- factura: con dos emisores listos, se elige
   await page.getByTestId('tab-new').click()
   const select = page.getByTestId('issuer-select')
@@ -159,6 +216,17 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await inline.getByTestId('save-buyer').click()
   await page.getByTestId('buyer-selected').filter({ hasText: 'María Visitante' }).waitFor()
   assert.match(await page.getByTestId('buyer-selected').innerText(), /PA123456/)
+
+  // La línea toma un producto importado: código, código auxiliar, unidad, precio e IVA.
+  await page.getByTestId('choose-product').click()
+  await page.getByTestId('product-search').fill('SRV')
+  await page.getByTestId('product-option').first().click()
+  assert.equal(await page.getByTestId('line-description').inputValue(), 'Consultoría & soporte <remoto>')
+  assert.equal(await page.getByTestId('line-unit-price').inputValue(), '133.93')
+  assert.equal(await page.getByTestId('line-code').inputValue(), 'SRV-001')
+  assert.match(await page.getByTestId('line-extra').innerText(), /AUX-1 · Horas/)
+  // cantidad 2 → 267.86 + IVA 15% 40.18 = 308.04
+  assert.equal(await page.getByTestId('grand-total').innerText(), '$ 308.04')
   await page.getByTestId('emit').click()
 
   // --- respuesta del SRI: recibida y no autorizada por la cadena de confianza
@@ -175,6 +243,7 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.match(await detail.innerText(), new RegExp(`001-002-${sequential.padStart(9, '0')}`))
   assert.match(await page.getByTestId('detail-issuer').innerText(), /Tienda Dos/)
   assert.match(await detail.innerText(), /María Visitante/)
+  assert.match(await detail.innerText(), /Consultoría & soporte <remoto>/)
   const accessKey = await page.getByTestId('access-key').innerText()
   assert.match(accessKey, /^\d{49}$/)
   assert.equal(accessKey.slice(24, 30), '001002')
@@ -197,7 +266,8 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.match(await page.getByTestId('buyer-selected').innerText(), /CONSUMIDOR FINAL/)
   await page.getByTestId('tab-buyers').click()
   await page.getByTestId('buyer-item').filter({ hasText: 'María Visitante' }).waitFor()
-  assert.equal(await page.getByTestId('buyer-item').count(), 3)
+  // consumidor final + Juan + los dos importados + María
+  assert.equal(await page.getByTestId('buyer-item').count(), 5)
   await page.getByTestId('tab-settings').click()
   assert.match(await card('Tienda Uno').getByTestId('signature-state').innerText(), /Bloqueada/)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Bloqueada/)

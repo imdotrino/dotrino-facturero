@@ -85,15 +85,16 @@ onBeforeUnmount(() => window.removeEventListener('afterprint', afterPrint))
         <table class="ride-table">
           <thead>
             <tr>
-              <th>{{ t('ride.code') }}</th><th>{{ t('ride.qty') }}</th><th>{{ t('ride.description') }}</th>
+              <th>{{ t('ride.code') }}</th><th>{{ t('ride.auxCode') }}</th><th>{{ t('ride.qty') }}</th><th>{{ t('ride.description') }}</th>
               <th>{{ t('ride.unitPrice') }}</th><th>{{ t('ride.discount') }}</th><th>{{ t('ride.total') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(l, i) in inv.totals.lines" :key="i">
               <td>{{ l.code }}</td>
+              <td>{{ l.auxCode }}</td>
               <td class="num">{{ l.quantity.replace(/\.?0+$/, '') }}</td>
-              <td>{{ l.description }}</td>
+              <td>{{ l.description }}<template v-if="l.unit"> ({{ l.unit }})</template></td>
               <td class="num">{{ l.unitPrice.replace(/(\.\d\d\d*?)0+$/, '$1') }}</td>
               <td class="num">{{ l.discount }}</td>
               <td class="num">{{ l.subtotal }}</td>

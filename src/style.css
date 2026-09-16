@@ -122,9 +122,10 @@ p { margin: .25rem 0; }
   user-select: none;
 }
 .tab[aria-selected="true"] { background: var(--primary-container); color: var(--on-primary-container); }
-@media (max-width: 480px) {
-  .tabs { gap: 0; padding: 0 .5rem; }
-  .tab { padding: .5rem .6rem; font-size: .9rem; }
+/* En un teléfono las pestañas bajan a una segunda fila en vez de esconderse a un lado. */
+@media (max-width: 640px) {
+  .tabs { flex-wrap: wrap; gap: .15rem; padding: 0 .5rem; overflow-x: visible; }
+  .tab { padding: .45rem .7rem; font-size: .9rem; }
 }
 
 .stack { display: flex; flex-direction: column; gap: 1rem; }
@@ -262,6 +263,11 @@ input:disabled, select:disabled { opacity: .6; }
   cursor: pointer;
 }
 .picker-item[aria-pressed="true"] { border-color: var(--primary); }
+.line-head { grid-column: 1 / -1; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.nowrap { white-space: nowrap; }
+.table-scroll { overflow-x: auto; max-height: 24rem; overflow-y: auto; }
+.import-exists td, .import-skip td { color: var(--muted); }
+textarea { font: inherit; color: var(--text); background: var(--surface-low); border: 1px solid var(--outline-variant); border-radius: 12px; padding: .6rem .75rem; width: 100%; resize: vertical; }
 .month-bar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .month { margin: 0; }
 

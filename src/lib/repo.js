@@ -7,6 +7,8 @@
 //                                 { id: 'draft', draft }          la factura a medio escribir
 //   facturero.buyers              un comprador registrado por entrada; id = uuid. Son de
 //                                 todos los emisores («consumidor final» no se guarda: es fijo)
+//   facturero.products            un producto o servicio por entrada; id = uuid. También de
+//                                 todos los emisores
 //   facturero.invoices.aaaa-mm-dd una entrada por factura; id = clave de acceso
 //
 // Puede haber varios emisores (varios RUC, cada uno en pruebas o en producción), y cada uno
@@ -24,6 +26,7 @@ import { getStore } from '../services/store.js'
 const SETTINGS = 'facturero.settings'
 const INVOICES_PREFIX = 'facturero.invoices.'
 const BUYERS = 'facturero.buyers'
+const PRODUCTS = 'facturero.products'
 const ISSUER_PREFIX = 'issuer:'
 const SIGNATURE_PREFIX = 'signature:'
 
@@ -128,6 +131,41 @@ export async function saveBuyer (buyer) {
 export async function removeBuyer (key) {
   const store = await getStore()
   return store.removeMessage(BUYERS, key)
+}
+
+// ---------- productos ----------
+
+// Anidado por la misma razón que el comprador: el `id` de la entrada es del almacén.
+export async function listProducts () {
+  const store = await getStore()
+  return (await store.listThread(PRODUCTS)).map((e) => ({ ...e.product, key: e.id }))
+}
+
+export async function saveProduct (product) {
+  const { key, ...data } = JSON.parse(JSON.stringify(product))
+  const entryId = key || crypto.randomUUID()
+  const store = await getStore()
+  await store.appendMessage(PRODUCTS, { id: entryId, ts: Date.now(), product: data })
+  return { ...data, key: entryId }
+}
+
+/**
+ * Guarda muchos de una vez (una sola escritura del almacén en vez de una por fila).
+ * @param {'buyers'|'products'} kind
+ */
+export async function saveMany (kind, items) {
+  const thread = kind === 'buyers' ? BUYERS : PRODUCTS
+  const field = kind === 'buyers' ? 'buyer' : 'product'
+  const now = Date.now()
+  const entries = JSON.parse(JSON.stringify(items)).map(({ key, ...data }) => ({ id: key || crypto.randomUUID(), ts: now, [field]: data }))
+  const store = await getStore()
+  await store.importThreads({ [thread]: entries }, 'merge')
+  return entries.length
+}
+
+export async function removeProduct (key) {
+  const store = await getStore()
+  return store.removeMessage(PRODUCTS, key)
 }
 
 // ---------- borrador ----------

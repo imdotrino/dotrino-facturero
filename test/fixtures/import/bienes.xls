@@ -1,0 +1,37 @@
+<table>
+    <tr>
+        <td colspan="13" align="center"><b>EMPRESA DE PRUEBA</b></td>
+    </tr>
+    <tr>
+        <td colspan="13" align="center"><b>REPORTE-BIENES</b></td>
+    </tr>
+    <tr>
+        <td colspan="13">Fecha de generacion: 2026-09-16 10:12:25</td>
+    </tr>
+</table>
+<table border="1">
+    <tr>
+        <td colspan="13"></td>
+    </tr>
+    <tr>
+        <th>Cod. principal</th><th>Cod. auxiliar</th><th>Descipcion</th><th>Tipo</th><th>Valor</th><th>Unid. medida</th><th>Tarifa IVA</th><th>Tarifa ICE</th><th>Establecimiento</th><th>Categoria</th><th>Estado</th><th>Control inventario</th><th>Existencias</th>
+    </tr>
+    <tr>
+        <td style="mso-number-format:'\@';">SRV-001</td><td style="mso-number-format:'\@';">AUX-1</td><td>Consultor&iacute;a &amp; soporte &lt;remoto&gt;</td><td>Servicio</td><td>133.93</td><td>Horas</td><td>15%</td><td></td><td>Todos</td><td>Ninguna</td><td>Activo</td><td>NO</td><td>0.00</td>
+    </tr>
+    <tr>
+        <td>LIB-002</td><td></td><td>Libro de texto</td><td>Bien</td><td>1,000.50</td><td></td><td>0%</td><td></td><td>Todos</td><td>Ninguna</td><td>Activo</td><td>NO</td><td>0.00</td>
+    </tr>
+    <tr>
+        <td>VIE-003</td><td></td><td>Tarifa vieja</td><td>Bien</td><td>10</td><td></td><td>12%</td><td></td><td>Todos</td><td>Ninguna</td><td>Activo</td><td>NO</td><td>0.00</td>
+    </tr>
+    <tr>
+        <td>INA-004</td><td></td><td>Ya no se vende</td><td>Bien</td><td>10</td><td></td><td>15%</td><td></td><td>Todos</td><td>Ninguna</td><td>Inactivo</td><td>NO</td><td>0.00</td>
+    </tr>
+    <tr>
+        <td>ICE-005</td><td></td><td>Bebida con ICE</td><td>Bien</td><td>3</td><td></td><td>15%</td><td>10%</td><td>Todos</td><td>Ninguna</td><td>Activo</td><td>NO</td><td>0.00</td>
+    </tr>
+    <tr>
+        <td>SRV-001</td><td></td><td>Repetido</td><td>Servicio</td><td>5</td><td></td><td>15%</td><td></td><td>Todos</td><td>Ninguna</td><td>Activo</td><td>NO</td><td>0.00</td>
+    </tr>
+    </table>

@@ -78,6 +78,37 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   consumidor final.
 - La lógica vive en `src/lib/buyers.js`.
 
+### Productos
+
+- **Dónde viven:** `facturero.products`. Son de todos los emisores y sus campos siguen la
+  tabla 12 de la ficha: código principal, código auxiliar, descripción, valor unitario y
+  tarifa de IVA. La unidad de medida va en `unidadMedida`. No se repite el código.
+- **En la factura:** elegir un producto en una línea **copia** sus datos a la línea
+  (`lineFromProduct`). Cambiar el producto después no toca borradores ni facturas.
+
+### Importar
+
+- **Qué lee:** los reportes de Facturero Móvil, «Reporte de clientes» y «Reporte-Bienes».
+  Todo en el aparato, con vista previa por fila (nuevo, ya registrado, no entra con su
+  motivo, se omite), y guardado de una sola vez con `importThreads`.
+- **`src/import/xls.js`:** un «.xls» puede ser Excel 97-2003 de verdad (BIFF8 en un
+  contenedor OLE2) o una tabla HTML. Se distingue por los bytes. Facturero Móvil exporta
+  los clientes en BIFF8 y los bienes en HTML.
+  - Lector propio de OLE2 y BIFF8: no hay librería al día en npm (SheetJS publica sus
+    versiones corregidas fuera).
+  - Tolera las cadenas de sectores solapadas del reporte de clientes, que xlrd llama
+    corrupción.
+- **`src/import/factureroMovil.js`:** busca las columnas por su encabezado, incluida la
+  errata «Descipcion».
+  - Quita el apóstrofo con el que Excel guarda las identificaciones.
+  - No importa: consumidor final, productos inactivos, tarifas históricas ni ICE.
+- **Pruebas:** con archivos sintéticos (`test/fixtures/import/`). Los .xls de clientes los
+  genera LibreOffice y el de bienes imita el HTML real. Ningún dato real entra al repo.
+- **«¿Necesitas otro importador?»:** manda el pedido por `feedback.dotrino.com`, el mismo
+  relevo que «Solicita una app» y «Contacto», firmado por el perfil y con un archivo
+  opcional de hasta 5 MB (ver `dotrino-feedback`, envío con adjunto). Es un envío
+  explícito y la pantalla avisa de que el archivo llega por correo a Dotrino.
+
 ### Almacén
 
 - Un hilo **por día** (`facturero.invoices.aaaa-mm-dd`). El store recorta cada hilo a un

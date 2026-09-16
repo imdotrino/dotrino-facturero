@@ -12,13 +12,15 @@ import { loadDraft, saveDraft, clearDraft } from '../lib/repo.js'
 import { money } from '../lib/format.js'
 import { requestUnlock } from './UnlockDialog.vue'
 import BuyerPicker from './BuyerPicker.vue'
+import ProductPicker from './ProductPicker.vue'
+import { lineFromProduct } from '../lib/products.js'
 
 const props = defineProps({ correcting: { type: Object, default: null } })
 const emit = defineEmits(['emitted', 'cancel-correction', 'settings'])
 
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
-const emptyLine = () => ({ code: '', description: '', quantity: '1', unitPrice: '', discount: '', vatCode: DEFAULT_VAT_CODE })
+const emptyLine = () => ({ code: '', auxCode: '', description: '', unit: '', quantity: '1', unitPrice: '', discount: '', vatCode: DEFAULT_VAT_CODE })
 // Cada factura empieza con «Consumidor final» (ficha técnica §9.10) y el emisor de la
 // anterior.
 const emptyDraft = (issuerId = '') => ({
@@ -121,6 +123,13 @@ onMounted(async () => {
   }
 })
 
+// Línea que tiene abierto el selector de productos (una a la vez), o null.
+const pickingLine = ref(null)
+function chooseProduct (i, product) {
+  Object.assign(draft.lines[i], lineFromProduct(product))
+  pickingLine.value = null
+}
+
 function addLine () {
   draft.lines.push(emptyLine())
 }
@@ -218,6 +227,11 @@ async function submit () {
     <fieldset class="card" :disabled="busy">
       <legend>{{ t('form.lines') }}</legend>
       <div v-for="(line, i) in draft.lines" :key="i" class="line" :data-line="i" data-testid="line">
+        <div class="line-head">
+          <button type="button" class="btn small" :aria-expanded="pickingLine === i" data-testid="choose-product" @click="pickingLine = pickingLine === i ? null : i">{{ t('products.choose') }}</button>
+          <span v-if="line.auxCode || line.unit" class="muted small" data-testid="line-extra">{{ [line.auxCode, line.unit].filter(Boolean).join(' · ') }}</span>
+        </div>
+        <ProductPicker v-if="pickingLine === i" @choose="chooseProduct(i, $event)" @close="pickingLine = null" />
         <label class="field wide">
           <span>{{ t('form.description') }}</span>
           <input v-model="line.description" autocomplete="off" data-testid="line-description" />

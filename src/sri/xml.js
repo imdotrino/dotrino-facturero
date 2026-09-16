@@ -88,7 +88,9 @@ export function buildInvoiceXml ({ issuer, draft, accessKey, sequential, issueDa
   const detalles = '<detalles>' + t.lines.map((l) =>
     '<detalle>' +
     opt('codigoPrincipal', l.code) +
+    opt('codigoAuxiliar', l.auxCode) +
     el('descripcion', l.description) +
+    opt('unidadMedida', l.unit) +
     el('cantidad', l.quantity) +
     el('precioUnitario', l.unitPrice) +
     el('descuento', l.discount) +

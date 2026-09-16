@@ -34,7 +34,9 @@ export function computeInvoice (draft) {
     const value = percent(base, parseDecimal(rate.rate))
     return {
       code: cleanText(line.code),
+      auxCode: cleanText(line.auxCode),
       description: cleanText(line.description),
+      unit: cleanText(line.unit),
       quantity: format(quantity, 6),
       unitPrice: format(unitPrice, 6),
       discount: format(discount, 2),
@@ -106,6 +108,8 @@ export function validate (draft, issuer) {
     if (!d) add(`lines[${i}].description`, 'required')
     else if (d.length > LIMITS.description) add(`lines[${i}].description`, 'too-long')
     if (cleanText(line.code).length > LIMITS.code) add(`lines[${i}].code`, 'too-long')
+    if (cleanText(line.auxCode).length > LIMITS.code) add(`lines[${i}].auxCode`, 'too-long')
+    if (cleanText(line.unit).length > 50) add(`lines[${i}].unit`, 'too-long')
     checkDecimal(line.quantity, `lines[${i}].quantity`, add, { positive: true })
     checkDecimal(line.unitPrice, `lines[${i}].unitPrice`, add)
     checkDecimal(line.discount || '0', `lines[${i}].discount`, add)
