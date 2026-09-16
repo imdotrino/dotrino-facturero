@@ -24,7 +24,11 @@ async function connect () {
   const identity = await getIdentity()
   let store
   try {
-    store = await Store.connect({ identity })
+    // Los hilos de facturas son por día (ver repo.js), y los de compradores y productos
+    // pueden pasar de las 1000 entradas del valor por defecto. El tope va en `connect` y no
+    // después: se aplica antes de la primera sincronización con la bóveda, que si no
+    // recortaría lo que baja.
+    store = await Store.connect({ identity, maxPerThread: 50000 })
   } catch (e) {
     // «Sin perfil» u «otro perfil» no son «no contesta»: se arreglan distinto, y el
     // código no se pierde al envolver.
@@ -39,8 +43,5 @@ async function connect () {
     err.code = 'store-profile-mismatch'
     throw err
   }
-  // Los hilos de facturas son por día (ver repo.js); el tope por hilo se sube por si un
-  // día de mucho movimiento pasa de las 1000 del valor por defecto.
-  await store.setMaxPerThread(50000)
   return store
 }

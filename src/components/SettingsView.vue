@@ -7,6 +7,7 @@ import { issuerName, issuerProblems } from '../lib/issuers.js'
 import { lock, forgetSigner } from '../lib/signature.js'
 import { requestUnlock } from './UnlockDialog.vue'
 import IssuerForm from './IssuerForm.vue'
+import BackupCard from './BackupCard.vue'
 
 // Una sola edición abierta a la vez: el id del emisor, 'new', o null.
 const editing = ref(null)
@@ -69,6 +70,7 @@ async function confirmRemove () {
 
 <template>
   <div class="stack" data-testid="settings">
+    <BackupCard />
     <section class="card stack" data-testid="issuers-section">
       <h2 class="label-row">
         <span>{{ t('settings.issuers') }}</span>

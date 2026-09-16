@@ -67,6 +67,13 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
 
   // --- primer emisor, con su firma dentro del mismo formulario
   await page.getByTestId('tab-settings').click()
+  // Un navegador recién estrenado no tiene bóveda: se dice dónde están los datos y por qué,
+  // y «Sincronizar ahora» se ve pero apagado.
+  const backup = page.getByTestId('backup')
+  await backup.getByTestId('backup-state').and(page.locator('[data-state="off"]')).waitFor({ timeout: 30_000 })
+  assert.equal(await backup.getByTestId('backup-headline').innerText(), 'Solo en este navegador')
+  assert.equal(await backup.getByTestId('backup-reason').innerText(), 'Este perfil no está enlazado a una bóveda.')
+  assert.equal(await backup.getByTestId('backup-sync').isDisabled(), true)
   await page.getByTestId('add-issuer').click()
   const form = page.getByTestId('new-issuer')
   await form.getByTestId('issuer-ruc').fill('1760013210001')

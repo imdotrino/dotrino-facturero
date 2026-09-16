@@ -67,6 +67,8 @@ async function downloadMonth () {
 }
 
 watch(month, load)
+// Facturas que llegan de la bóveda (emitidas en otro aparato): se vuelve a leer el mes.
+watch(() => state.invoicesVersion, load)
 onMounted(load)
 </script>
 

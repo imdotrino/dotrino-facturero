@@ -231,6 +231,35 @@ const messages = {
       lock: 'Bloquear',
       info: 'Qué es esto',
     },
+    backup: {
+      title: 'Dónde están tus datos',
+      info: 'Emisores, firmas cifradas, compradores, productos y facturas se guardan en este navegador. Si tu perfil está enlazado a tu bóveda, además se copian allí, cifrados, y los recuperas desde otro aparato de tu cuenta.',
+      checking: 'Comprobando…',
+      syncing: 'Sincronizando con tu bóveda…',
+      saving: 'Copiando los cambios a tu bóveda…',
+      backed: 'Respaldado en tu bóveda',
+      localOnly: 'Solo en este navegador',
+      syncNow: 'Sincronizar ahora',
+      lastSync: 'Última copia: {when}',
+      pending: 'Cambios sin respaldar: {count}',
+      tooLarge: '{count} registros son demasiado grandes para copiarlos a la bóveda.',
+      howToLink: 'Cómo enlazar tu bóveda',
+      off: {
+        'no-identity': 'La app no tiene perfil activo.',
+        'not-paired': 'Este perfil no está enlazado a una bóveda.',
+        revoked: 'Este aparato ya no pertenece a la cuenta.',
+        destroyed: 'El almacén se cerró.',
+        starting: 'Comprobando…',
+      },
+      errors: {
+        'no-content-key': 'Este aparato todavía no tiene la llave de tu cuenta para cifrar lo que guarda. La recibe cuando otro aparato de tu cuenta se conecta.',
+        'vault-no-reply': 'Tu bóveda no responde. Comprueba que está encendida.',
+        'vault-outdated': 'Tu bóveda necesita actualizarse para guardar estos datos.',
+        'not-paired': 'Este perfil no está enlazado a una bóveda.',
+        'vault-off': 'Este perfil no está enlazado a una bóveda.',
+        other: 'No se pudo copiar a tu bóveda: {message}',
+      },
+    },
     unlock: {
       title: 'Desbloquear la firma',
       password: 'Contraseña de la firma',
@@ -552,6 +581,35 @@ const messages = {
       lock: 'Lock',
       info: 'What is this',
     },
+    backup: {
+      title: 'Where your data is',
+      info: 'Issuers, encrypted signatures, buyers, products and invoices are kept in this browser. If your profile is linked to your vault, they are also copied there, encrypted, and you get them back on another device of your account.',
+      checking: 'Checking…',
+      syncing: 'Syncing with your vault…',
+      saving: 'Copying changes to your vault…',
+      backed: 'Backed up in your vault',
+      localOnly: 'Only in this browser',
+      syncNow: 'Sync now',
+      lastSync: 'Last copy: {when}',
+      pending: 'Changes not backed up: {count}',
+      tooLarge: '{count} records are too large to copy to the vault.',
+      howToLink: 'How to link your vault',
+      off: {
+        'no-identity': 'The app has no active profile.',
+        'not-paired': 'This profile is not linked to a vault.',
+        revoked: 'This device no longer belongs to the account.',
+        destroyed: 'The store was closed.',
+        starting: 'Checking…',
+      },
+      errors: {
+        'no-content-key': 'This device does not have your account key to encrypt what it saves yet. It gets it when another device of your account connects.',
+        'vault-no-reply': 'Your vault does not answer. Check that it is on.',
+        'vault-outdated': 'Your vault needs an update to keep this data.',
+        'not-paired': 'This profile is not linked to a vault.',
+        'vault-off': 'This profile is not linked to a vault.',
+        other: 'Could not copy to your vault: {message}',
+      },
+    },
     unlock: {
       title: 'Unlock the signature',
       password: 'Signature password',
@@ -634,6 +692,11 @@ export function t (path, vars) {
   const value = path.split('.').reduce((o, k) => (o == null ? o : o[k]), messages[lang.value])
   if (typeof value !== 'string') throw new Error(`missing translation: ${lang.value}.${path}`)
   return vars ? value.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`)) : value
+}
+
+/** ¿Hay texto para esta clave? Para códigos que vienen de fuera y pueden ser nuevos. */
+export function hasText (path) {
+  return typeof path.split('.').reduce((o, k) => (o == null ? o : o[k]), messages[lang.value]) === 'string'
 }
 
 /** Mensaje para un error con `code`; los desconocidos dicen lo que pasó, tal cual. */

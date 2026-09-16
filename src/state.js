@@ -15,6 +15,11 @@ export const state = reactive({
   signatures: [],
   buyers: [],
   products: [],
+  // Respaldo del almacén en la bóveda (`store.vault` de @dotrino/store). Se lee y se escribe
+  // siempre en el navegador; esto dice si además está a salvo en la bóveda, y si no, por qué.
+  backup: null,
+  // Sube cuando llegan facturas de la bóveda: la lista la mira para recargarse.
+  invoicesVersion: 0,
   toast: null,
 })
 
@@ -27,7 +32,8 @@ export async function boot () {
   state.booting = true
   state.bootError = null
   try {
-    await getStore()
+    const store = await getStore()
+    watchBackup(store)
     await refreshSettings()
   } catch (e) {
     console.error('[facturero] boot:', e)
@@ -35,6 +41,33 @@ export async function boot () {
   } finally {
     state.booting = false
   }
+}
+
+let watching = false
+
+function watchBackup (store) {
+  state.backup = store.vault
+  if (watching) return
+  watching = true
+  store.on('vault', (status) => {
+    state.backup = status
+    if (status.state !== 'synced' || status.changed.length === 0) return
+    // Lo que llegó de otro aparato: se recarga lo que cambió, no la app entera.
+    const mine = status.changed.filter((k) => k.startsWith('facturero.'))
+    if (mine.some((k) => k.startsWith('facturero.invoices.'))) state.invoicesVersion++
+    if (mine.some((k) => !k.startsWith('facturero.invoices.'))) {
+      refreshSettings().catch((e) => {
+        console.error('[facturero] refresh after vault sync:', e)
+        toast(errorText(e), 'error')
+      })
+    }
+  })
+}
+
+/** «Sincronizar ahora». Lanza con el código del almacén si no se pudo. */
+export async function syncBackup () {
+  const store = await getStore()
+  state.backup = await store.vaultSync()
 }
 
 export async function refreshSettings () {

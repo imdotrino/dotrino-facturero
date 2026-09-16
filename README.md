@@ -113,11 +113,18 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 ### Almacén
 
 - Un hilo **por día** (`facturero.invoices.aaaa-mm-dd`). El store recorta cada hilo a un
-  tope y descarta lo más viejo sin avisar. Las facturas se conservan 7 años.
+  tope y descarta lo más viejo sin avisar; se abre con `maxPerThread: 50000` (compradores y
+  productos pueden pasar de 1000 en un hilo). Las facturas se conservan 7 años.
 - El XML firmado y el autorizado van comprimidos con gzip.
 - Separado **por perfil**, con `@dotrino/store` ≥ 0.10.0. Hasta 0.9.0 la moneda de support
   abría el store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
   `services/store.js` igual comprueba `store.profileId` antes de devolver el store.
+- **Respaldo en la bóveda** con `@dotrino/store` ≥ 0.11.0 (y `dotrino-vault` ≥ 0.115.0): se
+  lee y se escribe en el navegador, y se copia a la bóveda por detrás, por partes y cifrado.
+  Hasta 0.10.0 la copia iba en un solo mensaje y pasado 1 MB dejaba de llegar sin avisar.
+  **Ajustes → Dónde están tus datos** (`BackupCard.vue`) dice «Respaldado en tu bóveda» o
+  «Solo en este navegador» con el motivo, y tiene «Sincronizar ahora». Lo que llega de otro
+  aparato recarga emisores/compradores/productos o la lista de facturas (`state.js`).
 
 ### Sin «RUC Proveedor» (decidido por el dueño el 2026-09-16)
 
