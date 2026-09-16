@@ -52,6 +52,23 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   abría el store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
   `services/store.js` igual comprueba `store.profileId` antes de devolver el store.
 
+### Sin «RUC Proveedor» (decidido por el dueño el 2026-09-16)
+
+- **Qué pide la norma:** la resolución NAC-DGERCGC26-00000027 (Registro Oficial 335,
+  28/07/2026) y el Anexo 26 de la ficha 2.34. Quien usa el sistema de un proveedor pone
+  `<campoAdicional nombre="RUC Proveedor">` con el RUC de ese proveedor. El plazo para los
+  emisores vence el 26/09/2026.
+- **Por qué Facturero no lo pone:** el art. 2 define como proveedor a quien desarrolla o es
+  dueño del código de un sistema **«con la finalidad de ser comercializados»**. Facturero es
+  gratuito y no se vende, así que no hay proveedor ni RUC que poner.
+- **Lo que no está resuelto:**
+  - El SRI no ha publicado un criterio sobre software gratuito o de código abierto.
+  - El XSD no puede exigir el campo y la ficha no trae ningún código de error nuevo.
+  - No se probó si el servicio de autorización lo revisa.
+- **Si Facturero se vende o se implanta para un cliente**, esto cambia: quien lo
+  comercialice tiene que registrarse (actividad J62021002) y su RUC va en las facturas.
+- Si el SRI publica un criterio, se revisa esta decisión.
+
 ## Estados de una factura
 
 `signed` (firmada, sin respuesta) → `received` (RECIBIDA, esperando) → `authorized` o
@@ -83,8 +100,7 @@ npm run test:e2e   # navegador + SRI de PRUEBAS (necesita red)
 - **Probar con una firma acreditada.** El SRI de pruebas comprueba la cadena de confianza
   antes que la firma. Con un certificado autofirmado no se puede saber si acepta el XAdES.
   Hace falta una firma real y un RUC habilitado en pruebas.
-- **Anexo 26 (ficha 2.34):** quien usa un sistema de facturación de un tercero debe
-  incluir el campo adicional «RUC Proveedor». Falta decidir si aplica y con qué RUC.
+
 - Notas de crédito, retenciones y guías de remisión.
 - Enviar el XML y el RIDE al correo del comprador. Hoy se descargan, se imprimen o se
   comparten desde el aparato.
