@@ -174,10 +174,10 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.equal(relayed.body.toString('utf8'), 'codigo,nombre\n1,Cliente de otro sistema\n')
   // Un archivo que pasa del tope ni se intenta enviar.
   const big = join(dir, 'grande.pdf')
-  await writeFile(big, Buffer.alloc(5 * 1024 * 1024 + 1))
+  await writeFile(big, Buffer.alloc(1024 * 1024 + 1))
   relayed = null
   await request.getByTestId('request-file').setInputFiles(big)
-  await request.getByTestId('request-file-problem').filter({ hasText: '5 MB' }).waitFor()
+  await request.getByTestId('request-file-problem').filter({ hasText: '1 MB' }).waitFor()
   await request.getByTestId('request-send').click()
   assert.equal(relayed, null)
 

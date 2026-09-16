@@ -4,11 +4,13 @@
 //
 // Con archivo, el cuerpo es el archivo tal cual y los datos van en la cabecera
 // X-Dotrino-Feedback (ver dotrino-feedback/src/attachment.js); sin archivo, el JSON de
-// siempre. El tope lo decide el Worker: 5 MB.
+// siempre. El Worker admite hasta 5 MB; aquí se piden como mucho 1 MB, porque lo que se
+// manda es una MUESTRA de lo que se quiere importar, no el archivo entero (dueño,
+// 2026-09-16).
 import { getIdentity } from './identity.js'
 
 export const FEEDBACK_URL = 'https://feedback.dotrino.com/'
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+export const MAX_ATTACHMENT_BYTES = 1024 * 1024
 export const ATTACHMENT_EXTENSIONS = ['xls', 'xlsx', 'xlsm', 'ods', 'csv', 'txt', 'xml', 'json', 'pdf', 'zip']
 
 export function attachmentProblem (file) {

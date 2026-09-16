@@ -106,7 +106,8 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   genera LibreOffice y el de bienes imita el HTML real. Ningún dato real entra al repo.
 - **«¿Necesitas otro importador?»:** manda el pedido por `feedback.dotrino.com`, el mismo
   relevo que «Solicita una app» y «Contacto», firmado por el perfil y con un archivo
-  opcional de hasta 5 MB (ver `dotrino-feedback`, envío con adjunto). Es un envío
+  opcional de hasta 1 MB, que alcanza para una muestra (el relevo admite 5 MB; ver
+  `dotrino-feedback`, envío con adjunto). Es un envío
   explícito y la pantalla avisa de que el archivo llega por correo a Dotrino.
 
 ### Almacén
