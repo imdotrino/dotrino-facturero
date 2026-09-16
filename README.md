@@ -48,9 +48,9 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 - Un hilo **por día** (`facturero.invoices.aaaa-mm-dd`). El store recorta cada hilo a un
   tope y descarta lo más viejo sin avisar. Las facturas se conservan 7 años.
 - El XML firmado y el autorizado van comprimidos con gzip.
-- Separado **por perfil**. El topbar va con `support-no-count`: la moneda conectaba el
-  store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
-  `services/store.js` comprueba el perfil antes de devolver el store.
+- Separado **por perfil**, con `@dotrino/store` ≥ 0.10.0. Hasta 0.9.0 la moneda de support
+  abría el store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
+  `services/store.js` igual comprueba `store.profileId` antes de devolver el store.
 
 ## Estados de una factura
 

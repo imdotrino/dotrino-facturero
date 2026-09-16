@@ -77,7 +77,6 @@ onMounted(() => {
     icon="./icon.svg"
     support-repo="imdotrino/dotrino-facturero"
     support-discord="https://discord.gg/D648uq7cth"
-    support-no-count
     profile
     @dotrino-lang="onLang"
   >
