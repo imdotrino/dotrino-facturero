@@ -3,13 +3,15 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, errorText } from '../i18n.js'
 import { state, usableIssuers, refreshSettings, toast } from '../state.js'
 import { computeInvoice, validate } from '../sri/invoice.js'
-import { VAT_RATES, DEFAULT_VAT_CODE, BUYER_ID_TYPES, PAYMENT_METHODS, FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from '../sri/catalog.js'
+import { VAT_RATES, DEFAULT_VAT_CODE, PAYMENT_METHODS } from '../sri/catalog.js'
+import { FINAL_CONSUMER_KEY, resolveBuyer, buyerSnapshot } from '../lib/buyers.js'
 import { emitInvoice, correctInvoice } from '../lib/emit.js'
 import { currentSigner } from '../lib/signature.js'
 import { issuerName } from '../lib/issuers.js'
 import { loadDraft, saveDraft, clearDraft } from '../lib/repo.js'
 import { money } from '../lib/format.js'
 import { requestUnlock } from './UnlockDialog.vue'
+import BuyerPicker from './BuyerPicker.vue'
 
 const props = defineProps({ correcting: { type: Object, default: null } })
 const emit = defineEmits(['emitted', 'cancel-correction', 'settings'])
@@ -17,9 +19,11 @@ const emit = defineEmits(['emitted', 'cancel-correction', 'settings'])
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
 const emptyLine = () => ({ code: '', description: '', quantity: '1', unitPrice: '', discount: '', vatCode: DEFAULT_VAT_CODE })
+// Cada factura empieza con «Consumidor final» (ficha técnica §9.10) y el emisor de la
+// anterior.
 const emptyDraft = (issuerId = '') => ({
   issuerId,
-  buyer: { idType: '05', id: '', name: '', email: '', phone: '', address: '' },
+  buyerKey: FINAL_CONSUMER_KEY,
   lines: [emptyLine()],
   payments: [{ method: '01' }],
   tip: '0',
@@ -32,27 +36,37 @@ const progress = ref('')
 const confirm = reactive({ open: false, resolve: null })
 const loaded = ref(false)
 
-const finalConsumer = computed(() => draft.buyer.idType === '07')
+const buyer = computed(() => resolveBuyer(draft.buyerKey, state.buyers))
+// Lo que se valida, se muestra y se emite: el borrador con el comprador ya resuelto.
+const fullDraft = computed(() => ({ ...draft, buyer: buyer.value ? buyerSnapshot(buyer.value) : {} }))
 const choices = computed(() => usableIssuers())
 const issuer = computed(() => state.issuers.find((i) => i.id === draft.issuerId) || null)
 const ready = computed(() => Boolean(issuer.value) && choices.value.some((i) => i.id === issuer.value.id))
 
 const problems = computed(() => [
   ...(issuer.value ? [] : [{ path: 'issuerId', code: 'required' }]),
-  ...validate(draft, issuer.value).filter((p) => !p.path.startsWith('issuer')),
+  ...(buyer.value ? [] : [{ path: 'buyerKey', code: 'required' }]),
+  ...(buyer.value ? validate(fullDraft.value, issuer.value).filter((p) => !p.path.startsWith('issuer')) : []),
 ])
+// Todo lo del comprador se enseña junto al selector: sus datos ya se revisaron al registrarlo,
+// así que aquí solo queda el tope de consumidor final (o un comprador que ya no existe).
+const buyerProblem = computed(() => {
+  if (!showProblems.value) return ''
+  const p = problems.value.find((x) => x.path === 'buyerKey' || x.path.startsWith('buyer.'))
+  return p ? t(`problems.${p.code}`) : ''
+})
 const problemAt = (path) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === path)
   return p ? t(`problems.${p.code}`) : ''
 }
 const generalProblems = computed(() => showProblems.value
-  ? problems.value.filter((p) => ['lines', 'payments'].includes(p.path) || (p.path === 'buyer.idType' && p.code !== 'required'))
+  ? problems.value.filter((p) => ['lines', 'payments'].includes(p.path))
   : [])
 
 const totals = computed(() => {
   try {
-    return computeInvoice(draft)
+    return computeInvoice(fullDraft.value)
   } catch (e) {
     if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(e.code)) throw e
     return null
@@ -74,23 +88,13 @@ function pickIssuer () {
   draft.issuerId = choices.value.length === 1 ? choices.value[0].id : ''
 }
 
-watch(() => draft.buyer.idType, (type, prev) => {
-  if (type === '07') {
-    draft.buyer.id = FINAL_CONSUMER_ID
-    draft.buyer.name = FINAL_CONSUMER_NAME
-  } else if (prev === '07') {
-    draft.buyer.id = ''
-    draft.buyer.name = ''
-  }
-})
-
 // El borrador se guarda al dejar de escribir, y lo pendiente se guarda ya al salir del
 // formulario: cambiar de pestaña o emitir no puede perder lo último que se escribió.
 let saveTimer = null
 function saveNow () {
   clearTimeout(saveTimer)
   saveTimer = null
-  return saveDraft(draft).catch((e) => { console.error('[facturero] draft:', e); toast(errorText(e), 'error') })
+  return saveDraft({ ...draft }).catch((e) => { console.error('[facturero] draft:', e); toast(errorText(e), 'error') })
 }
 watch(draft, () => {
   if (!loaded.value || props.correcting) return
@@ -101,7 +105,9 @@ onBeforeUnmount(() => { if (saveTimer) saveNow() })
 
 onMounted(async () => {
   try {
-    if (props.correcting) replaceDraft({ ...props.correcting.draft, issuerId: props.correcting.issuerId })
+    // Al corregir, el comprador es el de la factura; si no se sabe cuál es, queda sin
+    // elegir y se pide, en vez de caer en consumidor final.
+    if (props.correcting) replaceDraft({ ...props.correcting.draft, issuerId: props.correcting.issuerId, buyerKey: props.correcting.draft.buyerKey || '' })
     else {
       const saved = await loadDraft()
       if (saved) replaceDraft(saved)
@@ -156,10 +162,11 @@ async function submit () {
   const onProgress = (step) => { progress.value = t(`form.progress.${step}`) }
   try {
     const invoice = props.correcting
-      ? await correctInvoice(props.correcting, draft, { onProgress })
-      : await emitInvoice(draft, { onProgress })
+      ? await correctInvoice(props.correcting, fullDraft.value, { onProgress })
+      : await emitInvoice(fullDraft.value, { onProgress })
     if (!props.correcting) {
-      // El siguiente borrador sigue con el mismo emisor, y se guarda ya.
+      // El siguiente borrador sigue con el mismo emisor y vuelve a consumidor final, y se
+      // guarda ya.
       replaceDraft(emptyDraft(draft.issuerId))
       showProblems.value = false
       await saveNow()
@@ -205,39 +212,7 @@ async function submit () {
 
     <fieldset class="card" :disabled="busy">
       <legend>{{ t('form.buyer') }}</legend>
-      <div class="grid">
-        <label class="field">
-          <span>{{ t('form.idType') }}</span>
-          <select v-model="draft.buyer.idType" data-testid="buyer-id-type">
-            <option v-for="it in BUYER_ID_TYPES" :key="it.code" :value="it.code">{{ t(`idTypes.${it.key}`) }}</option>
-          </select>
-          <small v-if="problemAt('buyer.idType')" class="problem">{{ problemAt('buyer.idType') }}</small>
-        </label>
-        <label class="field">
-          <span>{{ t('form.id') }}</span>
-          <input v-model.trim="draft.buyer.id" :disabled="finalConsumer" inputmode="text" autocomplete="off" data-testid="buyer-id" />
-          <small v-if="problemAt('buyer.id')" class="problem">{{ problemAt('buyer.id') }}</small>
-        </label>
-        <label class="field wide">
-          <span>{{ t('form.name') }}</span>
-          <input v-model="draft.buyer.name" :disabled="finalConsumer" autocomplete="off" data-testid="buyer-name" />
-          <small v-if="problemAt('buyer.name')" class="problem">{{ problemAt('buyer.name') }}</small>
-        </label>
-        <label class="field">
-          <span>{{ t('form.email') }}</span>
-          <input v-model.trim="draft.buyer.email" type="email" autocomplete="off" data-testid="buyer-email" />
-          <small v-if="problemAt('buyer.email')" class="problem">{{ problemAt('buyer.email') }}</small>
-        </label>
-        <label class="field">
-          <span>{{ t('form.phone') }}</span>
-          <input v-model.trim="draft.buyer.phone" type="tel" autocomplete="off" data-testid="buyer-phone" />
-        </label>
-        <label class="field wide">
-          <span>{{ t('form.address') }}</span>
-          <input v-model="draft.buyer.address" autocomplete="off" data-testid="buyer-address" />
-          <small v-if="problemAt('buyer.address')" class="problem">{{ problemAt('buyer.address') }}</small>
-        </label>
-      </div>
+      <BuyerPicker v-model="draft.buyerKey" :problem="buyerProblem" :disabled="busy" />
     </fieldset>
 
     <fieldset class="card" :disabled="busy">
@@ -316,7 +291,7 @@ async function submit () {
     <div v-if="confirm.open" class="modal-backdrop" @click.self="answerConfirm(false)">
       <div class="modal card" role="dialog" aria-modal="true" :aria-label="t('form.confirmTitle')" data-testid="confirm-dialog">
         <h2>{{ t('form.confirmTitle') }}</h2>
-        <p>{{ t('form.confirmBody', { total: money(totals?.total ?? '0.00'), buyer: draft.buyer.name, issuer: issuer ? issuerName(issuer) : '' }) }}</p>
+        <p>{{ t('form.confirmBody', { total: money(totals?.total ?? '0.00'), buyer: buyer?.name, issuer: issuer ? issuerName(issuer) : '' }) }}</p>
         <div class="actions">
           <button type="button" class="btn ghost" @click="answerConfirm(false)">{{ t('form.cancel') }}</button>
           <button type="button" class="btn primary" data-testid="confirm-emit" @click="answerConfirm(true)">{{ t('form.confirm') }}</button>

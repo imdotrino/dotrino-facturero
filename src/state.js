@@ -2,7 +2,7 @@
 // NO viven aquí: un Proxy reactivo de Vue rompe el postMessage de los iframes y el uso
 // de una CryptoKey. Aquí solo hay datos planos.
 import { reactive } from 'vue'
-import { listIssuers } from './lib/repo.js'
+import { listIssuers, listBuyers } from './lib/repo.js'
 import { storedSignatures, onSignerChange } from './lib/signature.js'
 import { readyIssuers } from './lib/issuers.js'
 import { getStore } from './services/store.js'
@@ -13,6 +13,7 @@ export const state = reactive({
   bootError: null,
   issuers: [],
   signatures: [],
+  buyers: [],
   toast: null,
 })
 
@@ -36,9 +37,10 @@ export async function boot () {
 }
 
 export async function refreshSettings () {
-  const [issuers, signatures] = await Promise.all([listIssuers(), storedSignatures()])
+  const [issuers, signatures, buyers] = await Promise.all([listIssuers(), storedSignatures(), listBuyers()])
   state.issuers = issuers
   state.signatures = signatures
+  state.buyers = buyers
 }
 
 onSignerChange(() => {

@@ -106,6 +106,24 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await card('Tienda Uno').getByTestId('signature-state').filter({ hasText: 'Bloqueada' }).waitFor()
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Desbloqueada/)
 
+  // --- compradores: consumidor final es fijo; los demás se registran (correo obligatorio)
+  await page.getByTestId('tab-buyers').click()
+  const fcItem = page.locator('[data-buyer-key="final-consumer"]')
+  await fcItem.waitFor()
+  assert.equal(await fcItem.getByTestId('edit-buyer').isDisabled(), true)
+  assert.equal(await fcItem.getByTestId('remove-buyer').isDisabled(), true)
+  await page.getByTestId('add-buyer').click()
+  const newBuyer = page.getByTestId('new-buyer')
+  await newBuyer.getByTestId('buyer-id').fill('1710034066')
+  await newBuyer.getByTestId('buyer-name').fill('Juan Pérez')
+  await newBuyer.getByTestId('save-buyer').click()
+  await newBuyer.getByText('La cédula no es válida').waitFor()
+  await newBuyer.getByText('Obligatorio').waitFor() // el correo
+  await newBuyer.getByTestId('buyer-id').fill('1710034065')
+  await newBuyer.getByTestId('buyer-email').fill('juan@example.com')
+  await newBuyer.getByTestId('save-buyer').click()
+  await page.getByTestId('buyer-item').filter({ hasText: 'Juan Pérez' }).waitFor()
+
   // --- factura: con dos emisores listos, se elige
   await page.getByTestId('tab-new').click()
   const select = page.getByTestId('issuer-select')
@@ -115,13 +133,32 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await select.selectOption(dos)
   assert.match(await page.getByTestId('next-number').innerText(), new RegExp(`001-002-${sequential.padStart(9, '0')}`))
   await page.getByTestId('test-env').waitFor()
-  await page.getByTestId('buyer-id').fill('1710034065')
-  await page.getByTestId('buyer-name').fill('Juan Pérez')
-  await page.getByTestId('buyer-email').fill('juan@example.com')
+
+  // El comprador empieza en consumidor final, que solo llega a USD 50.
+  assert.match(await page.getByTestId('buyer-selected').innerText(), /CONSUMIDOR FINAL/)
   await page.getByTestId('line-description').fill('Servicio de prueba')
   await page.getByTestId('line-quantity').fill('2')
+  await page.getByTestId('line-unit-price').fill('50')
+  await page.getByTestId('emit').click()
+  await page.getByTestId('buyer-problem').filter({ hasText: 'USD 50' }).waitFor()
   await page.getByTestId('line-unit-price').fill('10')
   assert.equal(await page.getByTestId('grand-total').innerText(), '$ 23.00')
+
+  // Se busca a Juan (registrado antes)…
+  await page.getByTestId('change-buyer').click()
+  // por su cédula: la identificación tiene que haberse guardado
+  await page.getByTestId('buyer-search').fill('1710034065')
+  assert.equal(await page.getByTestId('buyer-option').count(), 1)
+  // …pero la factura va para una compradora nueva, registrada aquí mismo.
+  await page.getByTestId('create-buyer').click()
+  const inline = page.getByTestId('buyer-picker').getByTestId('buyer-form')
+  await inline.getByTestId('buyer-id-type').selectOption('06')
+  await inline.getByTestId('buyer-id').fill('PA123456')
+  await inline.getByTestId('buyer-name').fill('María Visitante')
+  await inline.getByTestId('buyer-email').fill('maria@example.com')
+  await inline.getByTestId('save-buyer').click()
+  await page.getByTestId('buyer-selected').filter({ hasText: 'María Visitante' }).waitFor()
+  assert.match(await page.getByTestId('buyer-selected').innerText(), /PA123456/)
   await page.getByTestId('emit').click()
 
   // --- respuesta del SRI: recibida y no autorizada por la cadena de confianza
@@ -137,6 +174,7 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.match(messages, /certificado root/)
   assert.match(await detail.innerText(), new RegExp(`001-002-${sequential.padStart(9, '0')}`))
   assert.match(await page.getByTestId('detail-issuer').innerText(), /Tienda Dos/)
+  assert.match(await detail.innerText(), /María Visitante/)
   const accessKey = await page.getByTestId('access-key').innerText()
   assert.match(accessKey, /^\d{49}$/)
   assert.equal(accessKey.slice(24, 30), '001002')
@@ -150,10 +188,16 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await item.waitFor({ timeout: 15_000 })
   assert.match(await item.innerText(), /No autorizada/)
   assert.match(await item.innerText(), /Tienda Dos/)
+  assert.match(await item.innerText(), /María Visitante/)
   await page.getByTestId('issuer-filter').waitFor()
   await page.getByTestId('tab-new').click()
   // El borrador se lee del almacén al abrir el formulario: se espera a que llegue.
   await page.waitForFunction((id) => document.querySelector('[data-testid=issuer-select]')?.value === id, dos, { timeout: 10_000 })
+  // La factura siguiente vuelve a consumidor final; María queda registrada.
+  assert.match(await page.getByTestId('buyer-selected').innerText(), /CONSUMIDOR FINAL/)
+  await page.getByTestId('tab-buyers').click()
+  await page.getByTestId('buyer-item').filter({ hasText: 'María Visitante' }).waitFor()
+  assert.equal(await page.getByTestId('buyer-item').count(), 3)
   await page.getByTestId('tab-settings').click()
   assert.match(await card('Tienda Uno').getByTestId('signature-state').innerText(), /Bloqueada/)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Bloqueada/)

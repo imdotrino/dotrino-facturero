@@ -10,9 +10,10 @@ import InvoiceList from './components/InvoiceList.vue'
 import InvoiceForm from './components/InvoiceForm.vue'
 import InvoiceDetail from './components/InvoiceDetail.vue'
 import SettingsView from './components/SettingsView.vue'
+import BuyersView from './components/BuyersView.vue'
 import UnlockDialog from './components/UnlockDialog.vue'
 
-const TABS = ['invoices', 'new', 'settings']
+const TABS = ['invoices', 'new', 'buyers', 'settings']
 // La pestaña sobrevive a un refresco; abrir la app de cero vuelve a Facturas (§4).
 const TAB_KEY = 'facturero.tab'
 
@@ -115,6 +116,7 @@ onMounted(() => {
         @cancel-correction="correcting = null; setTab('invoices')"
         @settings="setTab('settings')"
       />
+      <BuyersView v-else-if="tab === 'buyers'" />
       <SettingsView v-else-if="tab === 'settings'" />
     </template>
   </main>

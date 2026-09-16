@@ -62,6 +62,22 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   originales.
 - Las reglas sobre la lista de emisores viven en `src/lib/issuers.js`, sin almacén ni interfaz.
 
+### Compradores
+
+- **Dónde viven:** se registran en su pestaña (o desde la factura) y se guardan en
+  `facturero.buyers`. Son de **todos** los emisores.
+- **Qué se pide:** lo de la tabla 13 de la ficha. Identificación, nombres o razón social y
+  **correo** son obligatorios; teléfono y dirección, opcionales. No se registra dos veces la
+  misma identificación.
+- **«Consumidor final»:** es fijo (07 · 9999999999999 · CONSUMIDOR FINAL, tabla 6), no se
+  guarda ni se edita, y es el comprador **por defecto** de cada factura (§9.10). Por encima
+  de USD 50 hay que elegir o registrar al comprador.
+- **En el borrador:** guarda `buyerKey`, y la factura guarda una copia del comprador al
+  emitirla.
+- **Al corregir** una factura sin `buyerKey`, el comprador queda sin elegir. No se cae en
+  consumidor final.
+- La lógica vive en `src/lib/buyers.js`.
+
 ### Almacén
 
 - Un hilo **por día** (`facturero.invoices.aaaa-mm-dd`). El store recorta cada hilo a un

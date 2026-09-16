@@ -5,6 +5,8 @@
 //                                 { id: 'signature:<uuid>', … }   la firma electrónica DE ESE emisor,
 //                                                                   SELLADA (mismo uuid)
 //                                 { id: 'draft', draft }          la factura a medio escribir
+//   facturero.buyers              un comprador registrado por entrada; id = uuid. Son de
+//                                 todos los emisores («consumidor final» no se guarda: es fijo)
 //   facturero.invoices.aaaa-mm-dd una entrada por factura; id = clave de acceso
 //
 // Puede haber varios emisores (varios RUC, cada uno en pruebas o en producción), y cada uno
@@ -21,6 +23,7 @@ import { getStore } from '../services/store.js'
 
 const SETTINGS = 'facturero.settings'
 const INVOICES_PREFIX = 'facturero.invoices.'
+const BUYERS = 'facturero.buyers'
 const ISSUER_PREFIX = 'issuer:'
 const SIGNATURE_PREFIX = 'signature:'
 
@@ -102,6 +105,29 @@ export async function getSignatureRecord (issuerId) {
 
 export function saveSignatureRecord (issuerId, { envelope, sealedBy, info, fileName }) {
   return writeSetting(SIGNATURE_PREFIX + issuerId, { envelope, sealedBy, info, fileName })
+}
+
+// ---------- compradores ----------
+
+// El comprador va ANIDADO en la entrada: su `id` es el número de identificación, y el `id`
+// de la entrada es la clave del almacén. Juntos, uno pisaba al otro.
+export async function listBuyers () {
+  const store = await getStore()
+  return (await store.listThread(BUYERS)).map((e) => ({ ...e.buyer, key: e.id }))
+}
+
+/** Guarda un comprador. Sin `key` es uno nuevo. Devuelve el comprador con su clave. */
+export async function saveBuyer (buyer) {
+  const { key, ...data } = JSON.parse(JSON.stringify(buyer))
+  const entryId = key || crypto.randomUUID()
+  const store = await getStore()
+  await store.appendMessage(BUYERS, { id: entryId, ts: Date.now(), buyer: data })
+  return { ...data, key: entryId }
+}
+
+export async function removeBuyer (key) {
+  const store = await getStore()
+  return store.removeMessage(BUYERS, key)
 }
 
 // ---------- borrador ----------
