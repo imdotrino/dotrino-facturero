@@ -1,25 +1,29 @@
-// La firma electrónica del usuario.
+// Las firmas electrónicas del usuario (puede tener varias; cada emisor usa una).
 //
 // - El archivo .p12 se guarda en el almacén SELLADO con la llave de cifrado de este
 //   perfil (`id.encrypt` para uno mismo): en el almacén y en su respaldo solo hay bytes
 //   que únicamente abre esta identidad. Encima sigue protegido por su contraseña.
 // - La contraseña NO se guarda nunca. Se pide al desbloquear, abre el archivo, y lo que
 //   queda en memoria es la llave importada a WebCrypto como no extraíble. Recargar la
-//   página vuelve a cerrarla.
+//   página vuelve a cerrar todas.
+// - Cada firma se identifica por su huella (SHA-1 del certificado) y se desbloquea sola.
 // - Si algo no cuadra (no hay identidad, el sello no abre, el archivo no es de firma) se
 //   para con un código: no hay camino que guarde el archivo sin sellar.
 
 import { getIdentity } from '../services/identity.js'
-import { loadSignatureRecord, saveSignatureRecord, removeSignatureRecord } from './repo.js'
+import { listSignatureRecords, getSignatureRecord, saveSignatureRecord, removeSignatureRecord } from './repo.js'
 import { bytesToBase64, base64ToBytes } from './bytes.js'
 
-let signer = null
-let unlockedFingerprint = null
+/** huella → firmador desbloqueado. No se expone a Vue: un Proxy rompe la CryptoKey. */
+const signers = new Map()
 const listeners = new Set()
 
-/** El firmador desbloqueado, o null. No se expone a Vue: un Proxy rompe la CryptoKey. */
-export function currentSigner () {
-  return signer
+export function currentSigner (fingerprint) {
+  return signers.get(fingerprint) || null
+}
+
+export function isUnlocked (fingerprint) {
+  return signers.has(fingerprint)
 }
 
 export function onSignerChange (fn) {
@@ -27,31 +31,34 @@ export function onSignerChange (fn) {
   return () => listeners.delete(fn)
 }
 
-function setSigner (s, fingerprint) {
-  signer = s
-  unlockedFingerprint = fingerprint
-  for (const fn of listeners) fn(Boolean(s))
+function changed () {
+  for (const fn of listeners) fn()
 }
 
-export function lock () {
-  setSigner(null, null)
+export function lock (fingerprint) {
+  signers.delete(fingerprint)
+  changed()
 }
 
-/** Datos visibles de la firma guardada, o null si no hay ninguna. */
-export async function storedSignature () {
-  const r = await loadSignatureRecord()
-  if (!r) return null
-  return { info: r.info, fileName: r.fileName, savedAt: r.ts, unlocked: Boolean(signer) && unlockedFingerprint === r.info.fingerprint }
+/** Las firmas guardadas, con lo que se puede enseñar de cada una. */
+export async function storedSignatures () {
+  return (await listSignatureRecords()).map((r) => ({
+    fingerprint: r.info.fingerprint,
+    info: r.info,
+    fileName: r.fileName,
+    savedAt: r.ts,
+    unlocked: signers.has(r.info.fingerprint),
+  }))
 }
 
 /**
  * Comprueba el archivo con su contraseña, lo sella y lo guarda. Deja la firma
- * desbloqueada para esta sesión.
+ * desbloqueada para esta sesión. Devuelve sus datos visibles.
  */
 export async function importSignature (file, password) {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const { openP12 } = await import('../sri/p12.js')
-  const { signer: s, info } = await openP12(bytes, password)
+  const { signer, info } = await openP12(bytes, password)
 
   const id = await getIdentity()
   const encPub = await id.getEncryptionPubkey()
@@ -66,14 +73,14 @@ export async function importSignature (file, password) {
   if (check?.plaintext !== plaintext) throw codeError('seal-check-failed', 'the sealed signature could not be opened right after sealing it')
 
   await saveSignatureRecord({ envelope, sealedBy: encPub, info, fileName: file.name })
-  setSigner(s, info.fingerprint)
+  signers.set(info.fingerprint, signer)
+  changed()
   return info
 }
 
-/** Abre la firma guardada con su contraseña. */
-export async function unlockSignature (password) {
-  const r = await loadSignatureRecord()
-  if (!r) throw codeError('no-signature', 'there is no signature saved in this profile')
+/** Abre una firma guardada con su contraseña. */
+export async function unlockSignature (fingerprint, password) {
+  const r = await getSignatureRecord(fingerprint)
   const id = await getIdentity()
   let opened
   try {
@@ -82,15 +89,17 @@ export async function unlockSignature (password) {
     throw codeError('seal-not-for-this-device', `the saved signature cannot be opened on this device: ${e?.message || e}`, e)
   }
   const { openP12 } = await import('../sri/p12.js')
-  const { signer: s, info } = await openP12(base64ToBytes(opened.plaintext), password)
-  if (info.fingerprint !== r.info.fingerprint) throw codeError('signature-mismatch', 'the opened file is not the saved signature')
-  setSigner(s, info.fingerprint)
+  const { signer, info } = await openP12(base64ToBytes(opened.plaintext), password)
+  if (info.fingerprint !== fingerprint) throw codeError('signature-mismatch', 'the opened file is not the saved signature')
+  signers.set(fingerprint, signer)
+  changed()
   return info
 }
 
-export async function forgetSignature () {
-  await removeSignatureRecord()
-  lock()
+export async function forgetSignature (fingerprint) {
+  await removeSignatureRecord(fingerprint)
+  signers.delete(fingerprint)
+  changed()
 }
 
 function codeError (code, message, cause) {

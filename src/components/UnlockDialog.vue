@@ -2,12 +2,16 @@
 import { reactive } from 'vue'
 import { unlockSignature } from '../lib/signature.js'
 
-const prompt = reactive({ open: false, busy: false, error: '', resolve: null, reject: null })
+const prompt = reactive({ open: false, busy: false, error: '', fingerprint: '', holder: '', resolve: null })
 
-/** Pide la contraseña y desbloquea. Resuelve `true` si se desbloqueó, `false` si se canceló. */
-export function requestUnlock () {
+/**
+ * Pide la contraseña de UNA firma y la desbloquea. Resuelve `true` si se desbloqueó y
+ * `false` si se canceló.
+ * @param {{ fingerprint: string, info: { holder: string } }} signature
+ */
+export function requestUnlock (signature) {
   return new Promise((resolve) => {
-    Object.assign(prompt, { open: true, busy: false, error: '', resolve })
+    Object.assign(prompt, { open: true, busy: false, error: '', fingerprint: signature.fingerprint, holder: signature.info.holder, resolve })
   })
 }
 </script>
@@ -41,7 +45,7 @@ async function submit () {
   prompt.busy = true
   prompt.error = ''
   try {
-    await unlockSignature(password.value)
+    await unlockSignature(prompt.fingerprint, password.value)
     finish(true)
   } catch (e) {
     console.error('[facturero] unlock:', e)
@@ -56,6 +60,7 @@ async function submit () {
   <div v-if="prompt.open" class="modal-backdrop" @click.self="finish(false)">
     <form class="modal card" role="dialog" aria-modal="true" :aria-label="t('unlock.title')" data-testid="unlock-dialog" @submit.prevent="submit">
       <h2>{{ t('unlock.title') }}</h2>
+      <p class="muted" data-testid="unlock-holder">{{ prompt.holder }}</p>
       <label class="field">
         <span>{{ t('unlock.password') }}</span>
         <input ref="input" v-model="password" type="password" autocomplete="off" data-testid="unlock-password" />

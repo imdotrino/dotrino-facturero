@@ -100,8 +100,6 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <p v-if="state.issuer?.environment === '1'" class="banner warn" data-testid="test-env">{{ t('testEnvironment') }}</p>
-
       <InvoiceDetail
         v-if="detailOpen && openInvoice"
         :key="openInvoice.accessKey"

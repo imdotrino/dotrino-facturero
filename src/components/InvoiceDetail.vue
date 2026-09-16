@@ -7,6 +7,7 @@ import { submitInvoice, checkAuthorization } from '../lib/emit.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
 import { money, sriDateTime } from '../lib/format.js'
 import { VAT_RATES } from '../sri/catalog.js'
+import { issuerName } from '../lib/issuers.js'
 import RidePrint from './RidePrint.vue'
 
 const props = defineProps({ invoiceRef: { type: Object, required: true } })
@@ -107,6 +108,7 @@ onMounted(async () => {
         <div>
           <h2>{{ t('detail.number') }} {{ invoice.number }}</h2>
           <p class="muted">{{ invoice.issueDate }} · {{ buyerName }}</p>
+          <p class="muted small" data-testid="detail-issuer">{{ issuerName(invoice.issuer) }} · RUC {{ invoice.issuer.ruc }}</p>
         </div>
         <div class="inv-side">
           <strong class="big">{{ money(invoice.totals.total) }}</strong>
@@ -114,6 +116,7 @@ onMounted(async () => {
         </div>
       </header>
 
+      <p v-if="invoice.environment === '1'" class="banner warn">{{ t('testEnvironment') }}</p>
       <p v-if="invoice.status === 'received'" class="banner">{{ t('detail.received') }}</p>
 
       <div v-if="invoice.lastError" class="banner error" role="alert" data-testid="last-error">

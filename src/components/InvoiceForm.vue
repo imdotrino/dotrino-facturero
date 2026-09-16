@@ -1,11 +1,12 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, errorText } from '../i18n.js'
-import { state, issuerReady, refreshSettings, toast } from '../state.js'
+import { state, usableIssuers, refreshSettings, toast } from '../state.js'
 import { computeInvoice, validate } from '../sri/invoice.js'
 import { VAT_RATES, DEFAULT_VAT_CODE, BUYER_ID_TYPES, PAYMENT_METHODS, FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from '../sri/catalog.js'
 import { emitInvoice, correctInvoice } from '../lib/emit.js'
 import { currentSigner } from '../lib/signature.js'
+import { issuerName } from '../lib/issuers.js'
 import { loadDraft, saveDraft, clearDraft } from '../lib/repo.js'
 import { money } from '../lib/format.js'
 import { requestUnlock } from './UnlockDialog.vue'
@@ -16,7 +17,8 @@ const emit = defineEmits(['emitted', 'cancel-correction', 'settings'])
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
 const emptyLine = () => ({ code: '', description: '', quantity: '1', unitPrice: '', discount: '', vatCode: DEFAULT_VAT_CODE })
-const emptyDraft = () => ({
+const emptyDraft = (issuerId = '') => ({
+  issuerId,
   buyer: { idType: '05', id: '', name: '', email: '', phone: '', address: '' },
   lines: [emptyLine()],
   payments: [{ method: '01' }],
@@ -31,16 +33,21 @@ const confirm = reactive({ open: false, resolve: null })
 const loaded = ref(false)
 
 const finalConsumer = computed(() => draft.buyer.idType === '07')
-const ready = computed(() => issuerReady() && Boolean(state.signature))
+const choices = computed(() => usableIssuers())
+const issuer = computed(() => state.issuers.find((i) => i.id === draft.issuerId) || null)
+const ready = computed(() => Boolean(issuer.value) && choices.value.some((i) => i.id === issuer.value.id))
 
-const problems = computed(() => validate(draft, state.issuer))
+const problems = computed(() => [
+  ...(issuer.value ? [] : [{ path: 'issuerId', code: 'required' }]),
+  ...validate(draft, issuer.value).filter((p) => !p.path.startsWith('issuer')),
+])
 const problemAt = (path) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === path)
   return p ? t(`problems.${p.code}`) : ''
 }
 const generalProblems = computed(() => showProblems.value
-  ? problems.value.filter((p) => ['lines', 'payments', 'issuer'].includes(p.path) || p.path.startsWith('issuer.') || (p.path === 'buyer.idType' && p.code !== 'required'))
+  ? problems.value.filter((p) => ['lines', 'payments'].includes(p.path) || (p.path === 'buyer.idType' && p.code !== 'required'))
   : [])
 
 const totals = computed(() => {
@@ -59,6 +66,14 @@ function replaceDraft (d) {
   Object.assign(draft, emptyDraft(), JSON.parse(JSON.stringify(d)))
 }
 
+// Si el emisor del borrador ya no sirve (se borró o quedó incompleto) y solo hay uno con
+// el que se puede facturar, ese queda elegido. Con varios, elige el usuario.
+function pickIssuer () {
+  if (props.correcting) return
+  if (choices.value.some((i) => i.id === draft.issuerId)) return
+  draft.issuerId = choices.value.length === 1 ? choices.value[0].id : ''
+}
+
 watch(() => draft.buyer.idType, (type, prev) => {
   if (type === '07') {
     draft.buyer.id = FINAL_CONSUMER_ID
@@ -69,21 +84,28 @@ watch(() => draft.buyer.idType, (type, prev) => {
   }
 })
 
+// El borrador se guarda al dejar de escribir, y lo pendiente se guarda ya al salir del
+// formulario: cambiar de pestaña o emitir no puede perder lo último que se escribió.
 let saveTimer = null
+function saveNow () {
+  clearTimeout(saveTimer)
+  saveTimer = null
+  return saveDraft(draft).catch((e) => { console.error('[facturero] draft:', e); toast(errorText(e), 'error') })
+}
 watch(draft, () => {
   if (!loaded.value || props.correcting) return
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    saveDraft(draft).catch((e) => { console.error('[facturero] draft:', e); toast(errorText(e), 'error') })
-  }, 800)
+  saveTimer = setTimeout(saveNow, 800)
 }, { deep: true })
+onBeforeUnmount(() => { if (saveTimer) saveNow() })
 
 onMounted(async () => {
   try {
-    if (props.correcting) replaceDraft(props.correcting.draft)
+    if (props.correcting) replaceDraft({ ...props.correcting.draft, issuerId: props.correcting.issuerId })
     else {
       const saved = await loadDraft()
       if (saved) replaceDraft(saved)
+      pickIssuer()
     }
   } catch (e) {
     console.error('[facturero] load draft:', e)
@@ -102,7 +124,7 @@ function removeLine (i) {
 }
 
 async function reset () {
-  replaceDraft(emptyDraft())
+  replaceDraft(emptyDraft(draft.issuerId))
   showProblems.value = false
   await clearDraft().catch((e) => toast(errorText(e), 'error'))
 }
@@ -123,11 +145,12 @@ async function submit () {
     toast(t('errors.invalid-draft'), 'error')
     return
   }
-  if (!currentSigner()) {
-    const unlocked = await requestUnlock()
+  if (!currentSigner(issuer.value.signature)) {
+    const signature = state.signatures.find((s) => s.fingerprint === issuer.value.signature)
+    const unlocked = await requestUnlock(signature)
     if (!unlocked) return
   }
-  if (state.issuer.environment === '2' && !(await askConfirm())) return
+  if (issuer.value.environment === '2' && !(await askConfirm())) return
 
   busy.value = true
   const onProgress = (step) => { progress.value = t(`form.progress.${step}`) }
@@ -136,10 +159,10 @@ async function submit () {
       ? await correctInvoice(props.correcting, draft, { onProgress })
       : await emitInvoice(draft, { onProgress })
     if (!props.correcting) {
-      clearTimeout(saveTimer)
-      await clearDraft()
-      replaceDraft(emptyDraft())
+      // El siguiente borrador sigue con el mismo emisor, y se guarda ya.
+      replaceDraft(emptyDraft(draft.issuerId))
       showProblems.value = false
+      await saveNow()
     }
     await refreshSettings()
     emit('emitted', invoice)
@@ -160,10 +183,25 @@ async function submit () {
       <button type="button" class="btn ghost small" @click="emit('cancel-correction')">{{ t('form.cancelCorrection') }}</button>
     </div>
 
-    <div v-if="!ready" class="card readiness">
-      <p>{{ t('form.needsReady') }}</p>
+    <div v-if="choices.length === 0" class="card readiness" data-testid="needs-issuer">
+      <p>{{ t('form.needsIssuer') }}</p>
       <button type="button" class="btn primary" @click="emit('settings')">{{ t('ready.goSettings') }}</button>
     </div>
+
+    <fieldset class="card" :disabled="busy">
+      <legend>{{ t('form.issuer') }}</legend>
+      <select v-model="draft.issuerId" :disabled="Boolean(correcting) || choices.length === 0" :aria-label="t('form.issuer')" data-testid="issuer-select">
+        <option value="">{{ t('form.chooseIssuer') }}</option>
+        <!-- Al corregir, el emisor es el de la factura aunque hoy no sirva para emitir. -->
+        <option v-if="correcting && issuer && !choices.some((c) => c.id === issuer.id)" :value="issuer.id">{{ issuerName(issuer) }} · RUC {{ issuer.ruc }}</option>
+        <option v-for="i in choices" :key="i.id" :value="i.id">
+          {{ issuerName(i) }} · RUC {{ i.ruc }} · {{ i.establishment }}-{{ i.emissionPoint }} · {{ i.environment === '2' ? t('settings.envProd') : t('settings.envTest') }}
+        </option>
+      </select>
+      <small v-if="problemAt('issuerId')" class="problem">{{ problemAt('issuerId') }}</small>
+      <p v-if="issuer?.environment === '1'" class="banner warn" data-testid="test-env">{{ t('testEnvironment') }}</p>
+      <p v-if="issuer" class="muted small" data-testid="next-number">{{ t('form.nextNumber', { number: `${issuer.establishment}-${issuer.emissionPoint}-${String(issuer.nextSequential).padStart(9, '0')}` }) }}</p>
+    </fieldset>
 
     <fieldset class="card" :disabled="busy">
       <legend>{{ t('form.buyer') }}</legend>
@@ -270,7 +308,7 @@ async function submit () {
 
     <div class="actions sticky">
       <button v-if="!correcting" type="button" class="btn ghost" :disabled="busy" data-testid="clear-draft" @click="reset">{{ t('form.clear') }}</button>
-      <button type="submit" class="btn primary" :disabled="busy || !ready" :title="!ready ? t('form.needsReady') : ''" data-testid="emit">
+      <button type="submit" class="btn primary" :disabled="busy || !ready" :title="!ready ? t('form.chooseIssuer') : ''" data-testid="emit">
         {{ correcting ? t('form.resend') : t('form.emit') }}
       </button>
     </div>
@@ -278,7 +316,7 @@ async function submit () {
     <div v-if="confirm.open" class="modal-backdrop" @click.self="answerConfirm(false)">
       <div class="modal card" role="dialog" aria-modal="true" :aria-label="t('form.confirmTitle')" data-testid="confirm-dialog">
         <h2>{{ t('form.confirmTitle') }}</h2>
-        <p>{{ t('form.confirmBody', { total: money(totals?.total ?? '0.00'), buyer: draft.buyer.name }) }}</p>
+        <p>{{ t('form.confirmBody', { total: money(totals?.total ?? '0.00'), buyer: draft.buyer.name, issuer: issuer ? issuerName(issuer) : '' }) }}</p>
         <div class="actions">
           <button type="button" class="btn ghost" @click="answerConfirm(false)">{{ t('form.cancel') }}</button>
           <button type="button" class="btn primary" data-testid="confirm-emit" @click="answerConfirm(true)">{{ t('form.confirm') }}</button>

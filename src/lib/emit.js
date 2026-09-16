@@ -15,8 +15,9 @@ import { buildInvoiceXml, toBase64Utf8 } from '../sri/xml.js'
 import { signDocument } from '../sri/xades.js'
 import { computeInvoice, validate } from '../sri/invoice.js'
 import { receptionEnvelope, authorizationEnvelope, parseReception, parseAuthorization, callSri } from '../sri/soap.js'
-import { loadIssuer, saveIssuer, saveInvoice } from './repo.js'
+import { listIssuers, saveIssuer, saveInvoice, listSignatureRecords } from './repo.js'
 import { currentSigner } from './signature.js'
+import { issuerProblems } from './issuers.js'
 import { ecuadorToday } from './dates.js'
 import { gzipText, gunzipText } from './bytes.js'
 
@@ -26,12 +27,33 @@ export const AUTHORIZATION_WAITS = [2500, 4000, 8000]
 /** Mensajes de recepción que significan «ya lo tengo»: se pasa a consultar. */
 const ALREADY_RECEIVED = new Set(['43', '70'])
 
+/**
+ * El emisor con el que se va a firmar, leído del almacén en este momento (no de la
+ * pantalla, que puede ir por detrás), con los problemas del emisor y del borrador juntos.
+ */
+async function prepare (issuerId, draft) {
+  if (!issuerId) throw codeError('invalid-draft', 'no issuer chosen', { problems: [{ path: 'issuerId', code: 'required' }] })
+  const issuers = await listIssuers()
+  const issuer = issuers.find((i) => i.id === issuerId)
+  if (!issuer) throw codeError('issuer-not-found', `there is no issuer ${issuerId}`)
+  const signatures = (await listSignatureRecords()).map((r) => ({ fingerprint: r.info.fingerprint }))
+  const seen = new Set()
+  const problems = [...issuerProblems(issuer, { issuers, signatures }), ...validate(draft, issuer)]
+    .filter((p) => { const k = p.path + ':' + p.code; if (seen.has(k)) return false; seen.add(k); return true })
+  return { issuer, problems }
+}
+
+function signerFor (issuer) {
+  const signer = currentSigner(issuer.signature)
+  if (!signer) throw codeError('signature-locked', `the signature ${issuer.signature} is locked`, { fingerprint: issuer.signature })
+  return signer
+}
+
+/** Emite con el emisor elegido en el borrador (`draft.issuerId`). */
 export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
-  const issuer = await loadIssuer()
-  const problems = validate(draft, issuer)
+  const { issuer, problems } = await prepare(draft.issuerId, draft)
   if (problems.length) throw codeError('invalid-draft', 'the invoice has problems', { problems })
-  const signer = currentSigner()
-  if (!signer) throw codeError('signature-locked', 'the signature is locked')
+  const signer = signerFor(issuer)
 
   const { issueDate, day } = ecuadorToday()
   const seq = Number(issuer.nextSequential)
@@ -56,6 +78,7 @@ export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
     number: `${issuer.establishment}-${issuer.emissionPoint}-${sequential}`,
     environment: issuer.environment,
     createdAt: Date.now(),
+    issuerId: issuer.id,
     issuer,
     draft: JSON.parse(JSON.stringify(draft)),
     totals: computeInvoice(draft),
@@ -70,25 +93,23 @@ export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
 }
 
 /**
- * Corrige una factura DEVUELTA o NO AUTORIZADA: misma clave, mismo número y misma fecha
- * (ficha técnica §5.10), con los datos del comprador y las líneas nuevos.
+ * Corrige una factura DEVUELTA o NO AUTORIZADA: misma clave, mismo número, misma fecha y
+ * mismo emisor (ficha técnica §5.10), con los datos del comprador y las líneas nuevos.
  */
 export async function correctInvoice (invoice, draft, { onProgress = () => {} } = {}) {
   if (!['returned', 'rejected', 'signed'].includes(invoice.status)) throw codeError('not-correctable', `an invoice in state ${invoice.status} cannot be corrected`)
-  const issuer = await loadIssuer()
+  const { issuer, problems } = await prepare(invoice.issuerId, { ...draft, issuerId: invoice.issuerId })
   for (const k of ['ruc', 'establishment', 'emissionPoint', 'environment']) {
     if (issuer[k] !== invoice.issuer[k]) throw codeError('issuer-changed', `the issuer ${k} changed since this invoice was numbered`)
   }
-  const problems = validate(draft, { ...issuer, nextSequential: 1 })
   if (problems.length) throw codeError('invalid-draft', 'the invoice has problems', { problems })
-  const signer = currentSigner()
-  if (!signer) throw codeError('signature-locked', 'the signature is locked')
+  const signer = signerFor(issuer)
 
   onProgress('signing')
   const updated = {
     ...invoice,
     issuer,
-    draft: JSON.parse(JSON.stringify(draft)),
+    draft: JSON.parse(JSON.stringify({ ...draft, issuerId: invoice.issuerId })),
     totals: computeInvoice(draft),
     signedXmlGz: await gzipText(await signDocument(buildInvoiceXml({
       issuer, draft, accessKey: invoice.accessKey, sequential: invoice.sequential, issueDate: invoice.issueDate,

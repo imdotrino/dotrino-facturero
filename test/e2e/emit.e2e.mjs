@@ -1,6 +1,6 @@
 // De punta a punta, en un navegador de verdad y contra el SRI de PRUEBAS (necesita red):
-// datos del emisor → cargar firma → emitir → respuesta del SRI en pantalla → recargar y
-// que todo siga ahí.
+// cargar firma → dos emisores (el segundo, copia del primero con otra serie) → elegir el
+// emisor al facturar → respuesta del SRI en pantalla → recargar y que todo siga ahí.
 //
 // La app se sirve desde dist/ bajo https://facturero.dotrino.com, así la identidad y el
 // almacén (iframes de *.dotrino.com) contestan como en producción, y el SRI recibe el
@@ -58,32 +58,58 @@ async function openApp () {
   return { ctx, page, problems }
 }
 
-test('issuer, signature, emission to the SRI test environment, and persistence', { timeout: 180_000 }, async () => {
+test('signatures and several issuers, choosing the issuer when invoicing, SRI test environment, persistence', { timeout: 180_000 }, async () => {
   const { ctx, page, problems } = await openApp()
   const sequential = String(100000 + Math.floor(Math.random() * 800000))
 
-  // --- ajustes del emisor
-  await page.getByTestId('tab-settings').click()
-  await page.getByTestId('issuer-ruc').fill('1760013210001')
-  await page.getByTestId('issuer-legal-name').fill('PRUEBAS SERVICIO DE RENTAS INTERNAS')
-  await page.getByTestId('issuer-trade-name').fill('Facturero E2E')
-  await page.getByTestId('issuer-matrix-address').fill('Av. Amazonas y Colón')
-  await page.getByTestId('issuer-next-sequential').fill(sequential)
-  await page.getByTestId('save-issuer').click()
-  await page.getByTestId('toast').filter({ hasText: 'Guardado' }).waitFor()
-
   // --- firma: contraseña mala primero, luego la buena
+  await page.getByTestId('tab-settings').click()
+  await page.getByTestId('add-signature').click()
   await page.getByTestId('signature-file').setInputFiles(p12Path)
   await page.getByTestId('signature-password').fill('mala')
   await page.getByTestId('import-signature').click()
   await page.getByTestId('signature-error').filter({ hasText: 'contraseña' }).waitFor()
   await page.getByTestId('signature-password').fill(PASSWORD)
   await page.getByTestId('import-signature').click()
-  await page.getByTestId('signature-info').filter({ hasText: 'FIRMA DE PRUEBA FACTURERO' }).waitFor({ timeout: 20_000 })
-  assert.match(await page.getByTestId('signature-state').innerText(), /Desbloqueada/)
+  const signature = page.getByTestId('signature-item')
+  await signature.filter({ hasText: 'FIRMA DE PRUEBA FACTURERO' }).waitFor({ timeout: 20_000 })
+  assert.match(await signature.getByTestId('signature-state').innerText(), /Desbloqueada/)
 
-  // --- factura
+  // --- primer emisor (con una sola firma, nace con ella elegida)
+  await page.getByTestId('add-issuer').click()
+  const form = page.getByTestId('new-issuer')
+  await form.getByTestId('issuer-ruc').fill('1760013210001')
+  await form.getByTestId('issuer-legal-name').fill('PRUEBAS SERVICIO DE RENTAS INTERNAS')
+  await form.getByTestId('issuer-trade-name').fill('Tienda Uno')
+  await form.getByTestId('issuer-matrix-address').fill('Av. Amazonas y Colón')
+  await form.getByTestId('issuer-next-sequential').fill(sequential)
+  assert.notEqual(await form.getByTestId('issuer-signature').inputValue(), '')
+  await form.getByTestId('save-issuer').click()
+  await page.getByTestId('issuer-item').filter({ hasText: 'Tienda Uno' }).waitFor()
+
+  // --- duplicarlo: la copia choca por serie hasta cambiarle el punto de emisión
+  await page.getByTestId('issuer-item').filter({ hasText: 'Tienda Uno' }).getByTestId('duplicate-issuer').click()
+  const copy = page.getByTestId('new-issuer')
+  await copy.getByTestId('issuer-trade-name').fill('Tienda Dos')
+  await copy.getByTestId('save-issuer').click()
+  await copy.getByText('compartirían la numeración').waitFor()
+  await copy.getByTestId('issuer-emission-point').fill('002')
+  await copy.getByTestId('issuer-next-sequential').fill(sequential)
+  await copy.getByTestId('save-issuer').click()
+  await page.getByTestId('issuer-item').filter({ hasText: 'Tienda Dos' }).waitFor()
+  assert.equal(await page.getByTestId('issuer-item').count(), 2)
+  assert.match(await signature.innerText(), /Tienda Dos/)
+  assert.equal(await signature.getByTestId('forget-signature').isDisabled(), true)
+
+  // --- factura: con dos emisores listos, se elige
   await page.getByTestId('tab-new').click()
+  const select = page.getByTestId('issuer-select')
+  assert.equal(await select.inputValue(), '')
+  assert.equal(await page.getByTestId('emit').isDisabled(), true)
+  const dos = await select.locator('option', { hasText: 'Tienda Dos' }).getAttribute('value')
+  await select.selectOption(dos)
+  assert.match(await page.getByTestId('next-number').innerText(), new RegExp(`001-002-${sequential.padStart(9, '0')}`))
+  await page.getByTestId('test-env').waitFor()
   await page.getByTestId('buyer-id').fill('1710034065')
   await page.getByTestId('buyer-name').fill('Juan Pérez')
   await page.getByTestId('buyer-email').fill('juan@example.com')
@@ -97,37 +123,46 @@ test('issuer, signature, emission to the SRI test environment, and persistence',
   const detail = page.getByTestId('invoice-detail')
   await detail.waitFor({ timeout: 30_000 })
   await page.getByTestId('detail-status').filter({ hasText: /No autorizada|En espera/ }).waitFor({ timeout: 60_000 })
-  let status = await page.getByTestId('detail-status').innerText()
-  if (status === 'En espera') {
+  if (await page.getByTestId('detail-status').innerText() === 'En espera') {
     await page.getByTestId('check-authorization').click()
     await page.getByTestId('detail-status').filter({ hasText: 'No autorizada' }).waitFor({ timeout: 60_000 })
-    status = 'No autorizada'
   }
   const messages = await page.getByTestId('sri-messages').innerText()
   assert.match(messages, /39 · FIRMA INVALIDA/)
   assert.match(messages, /certificado root/)
+  assert.match(await detail.innerText(), new RegExp(`001-002-${sequential.padStart(9, '0')}`))
+  assert.match(await page.getByTestId('detail-issuer').innerText(), /Tienda Dos/)
   const accessKey = await page.getByTestId('access-key').innerText()
   assert.match(accessKey, /^\d{49}$/)
+  assert.equal(accessKey.slice(24, 30), '001002')
   assert.equal(await page.getByTestId('download-xml').isDisabled(), true)
   assert.equal(await page.getByTestId('correct').isDisabled(), false)
 
-  // --- recargar: la factura sigue, y la firma queda bloqueada
+  // --- recargar: la factura sigue, el emisor elegido se queda y la firma se bloquea
   await page.reload()
   await page.getByTestId('invoice-list').waitFor({ timeout: 30_000 })
   const item = page.locator(`[data-access-key="${accessKey}"]`)
   await item.waitFor({ timeout: 15_000 })
   assert.match(await item.innerText(), /No autorizada/)
+  assert.match(await item.innerText(), /Tienda Dos/)
+  await page.getByTestId('issuer-filter').waitFor()
+  await page.getByTestId('tab-new').click()
+  // El borrador se lee del almacén al abrir el formulario: se espera a que llegue.
+  await page.waitForFunction((id) => document.querySelector('[data-testid=issuer-select]')?.value === id, dos, { timeout: 10_000 })
   await page.getByTestId('tab-settings').click()
-  assert.match(await page.getByTestId('signature-state').innerText(), /Bloqueada/)
+  assert.match(await page.getByTestId('signature-item').getByTestId('signature-state').innerText(), /Bloqueada/)
+  const uno = page.getByTestId('issuer-item').filter({ hasText: 'Tienda Uno' })
+  assert.match(await uno.innerText(), new RegExp(`001-001-${sequential.padStart(9, '0')}`))
+  assert.match(await page.getByTestId('issuer-item').filter({ hasText: 'Tienda Dos' }).innerText(), new RegExp(`001-002-${String(Number(sequential) + 1).padStart(9, '0')}`))
 
   // --- desbloquear después de recargar: el sello abre con la identidad del perfil
-  await page.getByTestId('unlock').click()
+  await page.getByTestId('signature-item').getByTestId('unlock').click()
   await page.getByTestId('unlock-password').fill('mala')
   await page.getByTestId('unlock-submit').click()
   await page.getByTestId('unlock-error').waitFor()
   await page.getByTestId('unlock-password').fill(PASSWORD)
   await page.getByTestId('unlock-submit').click()
-  await page.getByTestId('signature-state').filter({ hasText: 'Desbloqueada' }).waitFor({ timeout: 20_000 })
+  await page.getByTestId('signature-item').getByTestId('signature-state').filter({ hasText: 'Desbloqueada' }).waitFor({ timeout: 20_000 })
 
   // Los únicos errores de consola aceptables son los que la app registra a propósito al
   // probar la contraseña mala.

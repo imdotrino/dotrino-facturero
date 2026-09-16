@@ -1,27 +1,24 @@
-// Estado compartido de la interfaz. Los pilares (identidad, almacén) y la llave de firma
+// Estado compartido de la interfaz. Los pilares (identidad, almacén) y las llaves de firma
 // NO viven aquí: un Proxy reactivo de Vue rompe el postMessage de los iframes y el uso
 // de una CryptoKey. Aquí solo hay datos planos.
 import { reactive } from 'vue'
-import { loadIssuer } from './lib/repo.js'
-import { storedSignature, onSignerChange } from './lib/signature.js'
-import { validate } from './sri/invoice.js'
+import { listIssuers } from './lib/repo.js'
+import { storedSignatures, onSignerChange } from './lib/signature.js'
+import { readyIssuers } from './lib/issuers.js'
 import { getStore } from './services/store.js'
 import { errorText } from './i18n.js'
 
 export const state = reactive({
   booting: true,
   bootError: null,
-  issuer: null,
-  signature: null,
+  issuers: [],
+  signatures: [],
   toast: null,
 })
 
-export function issuerReady () {
-  if (!state.issuer) return false
-  const problems = []
-  // Solo los problemas del emisor: el borrador va aparte.
-  validate({ buyer: {}, lines: [], payments: [] }, state.issuer).forEach((p) => { if (p.path.startsWith('issuer')) problems.push(p) })
-  return problems.length === 0
+/** Emisores con los que se puede facturar ahora mismo (datos completos y firma cargada). */
+export function usableIssuers () {
+  return readyIssuers(state.issuers, state.signatures)
 }
 
 export async function boot () {
@@ -39,12 +36,13 @@ export async function boot () {
 }
 
 export async function refreshSettings () {
-  state.issuer = await loadIssuer()
-  state.signature = await storedSignature()
+  const [issuers, signatures] = await Promise.all([listIssuers(), storedSignatures()])
+  state.issuers = issuers
+  state.signatures = signatures
 }
 
 onSignerChange(() => {
-  storedSignature().then((s) => { state.signature = s }).catch((e) => toast(errorText(e), 'error'))
+  storedSignatures().then((s) => { state.signatures = s }).catch((e) => toast(errorText(e), 'error'))
 })
 
 let toastTimer = null

@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { t, errorText, lang } from '../i18n.js'
-import { state, issuerReady, toast } from '../state.js'
+import { state, usableIssuers, toast } from '../state.js'
+import { issuerName } from '../lib/issuers.js'
 import { listInvoices } from '../lib/repo.js'
 import { ecuadorMonth, shiftMonth } from '../lib/dates.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
@@ -14,6 +15,7 @@ const month = ref(ecuadorMonth())
 const invoices = ref([])
 const loading = ref(false)
 const query = ref('')
+const issuerFilter = ref('')   // '' = todos los emisores
 
 const monthLabel = computed(() => {
   const [y, m] = month.value.split('-').map(Number)
@@ -25,10 +27,12 @@ const isCurrentMonth = computed(() => month.value >= ecuadorMonth())
 
 const visible = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return invoices.value
-  return invoices.value.filter((i) => `${i.number} ${buyerName(i)} ${i.draft.buyer.id}`.toLowerCase().includes(q))
+  return invoices.value
+    .filter((i) => !issuerFilter.value || i.issuerId === issuerFilter.value)
+    .filter((i) => !q || `${i.number} ${buyerName(i)} ${i.draft.buyer.id} ${issuerName(i.issuer)} ${i.issuer.ruc}`.toLowerCase().includes(q))
 })
-const authorized = computed(() => invoices.value.filter((i) => i.status === 'authorized'))
+// La descarga del mes respeta el filtro de emisor, no la búsqueda.
+const authorized = computed(() => invoices.value.filter((i) => i.status === 'authorized' && (!issuerFilter.value || i.issuerId === issuerFilter.value)))
 
 function buyerName (i) {
   return i.draft.buyer.idType === '07' ? 'CONSUMIDOR FINAL' : i.draft.buyer.name
@@ -48,12 +52,14 @@ async function load () {
 
 async function downloadMonth () {
   try {
+    // Una carpeta por RUC y ambiente: las de pruebas no se mezclan con las que valen.
     const files = []
     for (const inv of authorized.value) {
-      files.push({ name: `${inv.number}_${inv.accessKey}.xml`, data: await gunzipText(inv.authorizedXmlGz), date: new Date(inv.createdAt) })
+      const folder = `${inv.issuer.ruc}_${inv.environment === '2' ? 'produccion' : 'pruebas'}`
+      files.push({ name: `${folder}/${inv.number}_${inv.accessKey}.xml`, data: await gunzipText(inv.authorizedXmlGz), date: new Date(inv.createdAt) })
     }
-    const ruc = state.issuer?.ruc || 'facturas'
-    downloadBlob(new Blob([zipStore(files)], { type: 'application/zip' }), `facturas_${ruc}_${month.value}.zip`)
+    const scope = issuerFilter.value ? state.issuers.find((i) => i.id === issuerFilter.value)?.ruc : 'todos'
+    downloadBlob(new Blob([zipStore(files)], { type: 'application/zip' }), `facturas_${scope}_${month.value}.zip`)
   } catch (e) {
     console.error('[facturero] zip:', e)
     toast(errorText(e), 'error')
@@ -66,9 +72,10 @@ onMounted(load)
 
 <template>
   <section class="stack" data-testid="invoice-list">
-    <div v-if="!issuerReady() || !state.signature" class="card readiness" data-testid="readiness">
-      <p v-if="!issuerReady()">{{ t('ready.noIssuer') }}</p>
-      <p v-if="!state.signature">{{ t('ready.noSignature') }}</p>
+    <div v-if="usableIssuers().length === 0" class="card readiness" data-testid="readiness">
+      <p v-if="state.issuers.length === 0">{{ t('ready.noIssuer') }}</p>
+      <p v-if="state.signatures.length === 0">{{ t('ready.noSignature') }}</p>
+      <p v-if="state.issuers.length && state.signatures.length">{{ t('ready.noUsableIssuer') }}</p>
       <button class="btn primary" data-testid="go-settings" @click="emit('settings')">{{ t('ready.goSettings') }}</button>
     </div>
 
@@ -77,6 +84,11 @@ onMounted(load)
       <h2 class="month">{{ monthLabel }}</h2>
       <button class="btn icon" :aria-label="t('list.nextMonth')" :title="t('list.nextMonth')" :disabled="isCurrentMonth" data-testid="next-month" @click="month = shiftMonth(month, 1)">›</button>
     </div>
+
+    <select v-if="state.issuers.length > 1" v-model="issuerFilter" :aria-label="t('list.issuerFilter')" data-testid="issuer-filter">
+      <option value="">{{ t('list.allIssuers') }}</option>
+      <option v-for="i in state.issuers" :key="i.id" :value="i.id">{{ issuerName(i) }} · {{ i.ruc }} · {{ i.environment === '2' ? t('settings.envProd') : t('settings.envTest') }}</option>
+    </select>
 
     <div class="row">
       <input v-model="query" class="grow" type="search" :placeholder="t('list.search')" :aria-label="t('list.search')" data-testid="search" />
@@ -91,6 +103,7 @@ onMounted(load)
           <span class="inv-main">
             <strong>{{ inv.number }}</strong>
             <span class="muted">{{ inv.issueDate }} · {{ buyerName(inv) }}</span>
+            <span class="muted small">{{ issuerName(inv.issuer) }}<template v-if="inv.environment === '1'"> · <span class="chip test">{{ t('settings.envTest') }}</span></template></span>
           </span>
           <span class="inv-side">
             <strong>{{ money(inv.totals.total) }}</strong>

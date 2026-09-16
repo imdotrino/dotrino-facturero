@@ -234,6 +234,10 @@ input:disabled, select:disabled { opacity: .6; }
 .error-card { border-left: 4px solid var(--error); }
 .readiness p { font-weight: 600; }
 
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+.sub-card { border: 1px solid var(--outline-variant); border-radius: 12px; padding: .75rem; display: flex; flex-direction: column; gap: .35rem; }
+.row.between { justify-content: space-between; flex-wrap: wrap; }
+.chip.test { background: var(--warn-bg); color: var(--warn-text); }
 .month-bar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .month { margin: 0; }
 
@@ -309,7 +313,8 @@ input:disabled, select:disabled { opacity: .6; }
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
+  /* Por encima de la barra de acciones fija del formulario, para no tapar sus botones. */
+  bottom: calc(5rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   background: var(--text);
   color: var(--surface);

@@ -43,6 +43,20 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 - forge no abría un `.p12` AES (el formato por defecto de OpenSSL 3) con contraseñas con
   ñ o tildes. PBES2 usa UTF-8 y el MAC usa BMPString (RFC 7292 B.1). `readP12` lo corrige.
 
+### Emisores y firmas
+
+- **Varios emisores:** un RUC, una serie (establecimiento + punto de emisión) y un ambiente
+  (pruebas o producción). Cada uno lleva su propio secuencial y dice con qué firma factura.
+- **Qué emisor se usa:** se elige al facturar (`draft.issuerId`), y el borrador lo recuerda.
+- **Firmas:** van en otra lista. Una firma sirve a varios emisores, y cada una se desbloquea
+  por separado.
+- **Series repetidas:** no se pueden guardar dos emisores con el mismo RUC, serie y ambiente
+  (`duplicate-series`). Tendrían dos contadores para la misma numeración y el SRI rechazaría
+  la segunda factura (45).
+- **Copia del emisor:** cada factura guarda su `issuerId` y una copia del emisor al emitirla.
+  Si luego se edita o se borra el emisor, el RIDE sigue saliendo con los datos originales.
+- Las reglas sobre la lista de emisores viven en `src/lib/issuers.js`, sin almacén ni interfaz.
+
 ### Almacén
 
 - Un hilo **por día** (`facturero.invoices.aaaa-mm-dd`). El store recorta cada hilo a un
