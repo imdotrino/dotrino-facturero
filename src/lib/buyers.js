@@ -9,9 +9,10 @@
 // teléfono y dirección son opcionales. El correo NO es obligatorio (dueño, 2026-09-16): la
 // tabla 13 de la ficha que lo marcaba así es la del registro de clientes del sistema gratuito
 // del SRI, no una regla de la factura —el XSD lo trae como campo adicional opcional y el SRI
-// autoriza sin él—, y facturero no manda correos. Si viene, se valida que tenga forma de correo.
+// autoriza sin él—, y facturero no manda correos. Si viene, se valida que tenga forma de correo;
+// puede traer varios separados por comas.
 
-import { cleanText, isCedula, isRuc } from '../sri/invoice.js'
+import { cleanText, isCedula, isRuc, splitEmails, joinEmails, emailProblem } from '../sri/invoice.js'
 import { FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from '../sri/catalog.js'
 
 export const FINAL_CONSUMER_KEY = 'final-consumer'
@@ -37,10 +38,16 @@ export function normalizeBuyer (b) {
     idType: b.idType,
     id: cleanText(b.id),
     name: cleanText(b.name),
-    email: cleanText(b.email),
+    email: tidyEmails(b.email),
     phone: cleanText(b.phone),
     address: cleanText(b.address),
   }
+}
+
+/** Varios correos bien escritos quedan como «a@b.com, c@d.com»; si alguno falla se deja tal cual, para señalarlo. */
+function tidyEmails (text) {
+  const { valid, invalid } = splitEmails(text)
+  return invalid.length ? cleanText(text) : joinEmails(valid)
 }
 
 /** Lo que impide registrar un comprador. `[{ path, code }]`. */
@@ -55,7 +62,7 @@ export function buyerProblems (buyer, buyers = []) {
   else if (b.id.length > 20) add('buyer.id', 'too-long')
   if (!b.name) add('buyer.name', 'required')
   else if (b.name.length > 300) add('buyer.name', 'too-long')
-  if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) add('buyer.email', 'bad-email')
+  if (emailProblem(b.email)) add('buyer.email', emailProblem(b.email))
   if (b.address.length > 300) add('buyer.address', 'too-long')
   if (b.id && buyers.some((o) => o.key !== b.key && o.idType === b.idType && o.id === b.id)) add('buyer.id', 'duplicate-buyer')
   return problems

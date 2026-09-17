@@ -137,11 +137,12 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   const clients = page.getByTestId('import-buyers')
   await clients.getByTestId('import-file').setInputFiles(join(IMPORT_FIXTURES, 'clientes-pequeno.xls'))
   await clients.getByTestId('import-preview').waitFor()
-  // Juan ya estaba registrado; entran dos, dos no (sin correo y correo malo) y consumidor
-  // final se omite.
-  assert.match(await clients.getByTestId('import-summary').innerText(), /2 nuevos, 1 ya registrados, 3 que no entran/)
+  // Juan ya estaba registrado; entran tres (uno con un correo que no vale, que se importa sin
+  // él y lo dice), uno no (repetido) y consumidor final se omite.
+  assert.match(await clients.getByTestId('import-summary').innerText(), /3 nuevos, 1 ya registrados, 2 que no entran/)
+  await clients.getByTestId('import-note').filter({ hasText: 'se importa sin él' }).waitFor()
   await clients.getByTestId('import-confirm').click()
-  await clients.getByTestId('import-done').filter({ hasText: '2' }).waitFor()
+  await clients.getByTestId('import-done').filter({ hasText: '3' }).waitFor()
   const goods = page.getByTestId('import-products')
   await goods.getByTestId('import-file').setInputFiles(join(IMPORT_FIXTURES, 'bienes.xls'))
   await goods.getByTestId('import-preview').waitFor()
@@ -272,8 +273,8 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.match(await page.getByTestId('buyer-selected').innerText(), /CONSUMIDOR FINAL/)
   await page.getByTestId('tab-buyers').click()
   await page.getByTestId('buyer-item').filter({ hasText: 'María Visitante' }).waitFor()
-  // consumidor final + Juan + los dos importados + María
-  assert.equal(await page.getByTestId('buyer-item').count(), 5)
+  // consumidor final + Juan + los tres importados + María
+  assert.equal(await page.getByTestId('buyer-item').count(), 6)
   await page.getByTestId('tab-settings').click()
   assert.match(await card('Tienda Uno').getByTestId('signature-state').innerText(), /Bloqueada/)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Bloqueada/)

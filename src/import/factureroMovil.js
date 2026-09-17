@@ -8,6 +8,7 @@
 import { buyerProblems, normalizeBuyer } from '../lib/buyers.js'
 import { productProblems, normalizeProduct } from '../lib/products.js'
 import { VAT_RATES } from '../sri/catalog.js'
+import { splitEmails, joinEmails } from '../sri/invoice.js'
 
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
@@ -47,7 +48,8 @@ const ID_TYPES = {
 /**
  * @param {string[][]} rows
  * @param {object[]} registered compradores ya guardados
- * @returns {{ items: Array<{ row: number, buyer: object, status: 'new'|'exists'|'invalid', problems: object[] }> }}
+ * @returns {{ items: Array<{ row: number, buyer: object, status: 'new'|'exists'|'invalid', problems: object[], notes: object[] }> }}
+ *   `notes`: lo que se cambió para que la fila entre (hoy, correos que no valen y se dejan fuera).
  */
 export function importBuyers (rows, registered) {
   const { headerRow, col } = locate(rows, {
@@ -64,22 +66,26 @@ export function importBuyers (rows, registered) {
     const cell = (k) => (col[k] === undefined ? '' : String(rows[r][col[k]] ?? '').trim())
     if (!cell('name') && !cell('id')) continue
     const typeCode = ID_TYPES[fold(cell('idType'))]
+    // Un correo que no vale NO deja fuera al cliente (el correo es opcional): se quitan los que
+    // no son correos y la fila lo dice.
+    const emails = splitEmails(cell('email'))
+    const notes = emails.invalid.length ? [{ path: 'buyer.email', code: emails.valid.length ? 'import-email-partial' : 'import-email-dropped' }] : []
     const buyer = normalizeBuyer({
       idType: typeCode || '',
       // Excel guarda la identificación como texto con un apóstrofo delante.
       id: cell('id').replace(/^'/, ''),
       name: cell('name'),
-      email: cell('email'),
+      email: joinEmails(emails.valid),
       phone: cell('phone'),
       address: cell('address'),
     })
     if (typeCode === '07') {
-      items.push({ row: r + 1, buyer, status: 'skip', problems: [{ path: 'buyer.idType', code: 'import-final-consumer' }] })
+      items.push({ row: r + 1, buyer, status: 'skip', problems: [{ path: 'buyer.idType', code: 'import-final-consumer' }], notes: [] })
       continue
     }
     const same = (b) => b.idType === buyer.idType && b.id === buyer.id
     if (registered.some(same)) {
-      items.push({ row: r + 1, buyer, status: 'exists', problems: [] })
+      items.push({ row: r + 1, buyer, status: 'exists', problems: [], notes: [] })
       continue
     }
     const problems = buyerProblems(buyer, registered)
@@ -87,7 +93,7 @@ export function importBuyers (rows, registered) {
     if (seen.some(same)) problems.push({ path: 'buyer.id', code: 'import-duplicate-row' })
     const status = problems.length ? 'invalid' : 'new'
     if (status === 'new') seen.push(buyer)
-    items.push({ row: r + 1, buyer, status, problems })
+    items.push({ row: r + 1, buyer, status, problems, notes })
   }
   return { items }
 }

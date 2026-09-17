@@ -7,11 +7,32 @@
 import { parseDecimal, mul, round, percent, format, sum } from './decimal.js'
 import { vatRate, BUYER_ID_TYPES, PAYMENT_METHODS, FINAL_CONSUMER_ID, FINAL_CONSUMER_MAX, RIMPE_LEGENDS } from './catalog.js'
 
-const LIMITS = { name: 300, address: 300, description: 300, code: 25, extra: 300, id: 20 }
+const LIMITS = { name: 300, address: 300, description: 300, code: 25, extra: 300, id: 20, email: 300 }
 
 /** Colapsa espacios y saltos de línea: el XSD no admite saltos en ningún campo de texto. */
 export function cleanText (value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
+
+/**
+ * Los correos de un campo: uno o varios, separados por coma, punto y coma o espacios (así los
+ * guarda Facturero Móvil). En la factura van juntos en un solo campo adicional.
+ */
+export function splitEmails (text) {
+  const parts = cleanText(text).split(/[,;\s]+/).filter(Boolean)
+  return { valid: parts.filter((p) => EMAIL_RE.test(p)), invalid: parts.filter((p) => !EMAIL_RE.test(p)) }
+}
+
+export const joinEmails = (list) => list.join(', ')
+
+/** `''` si el campo de correo está bien (vacío también vale), o el código del problema. */
+export function emailProblem (text) {
+  const value = cleanText(text)
+  if (!value) return ''
+  if (splitEmails(value).invalid.length) return 'bad-email'
+  return value.length > LIMITS.email ? 'too-long' : ''
 }
 
 /**
@@ -99,7 +120,7 @@ export function validate (draft, issuer) {
   if (!cleanText(buyer.name)) add('buyer.name', 'required')
   else if (cleanText(buyer.name).length > LIMITS.name) add('buyer.name', 'too-long')
   if (cleanText(buyer.address).length > LIMITS.address) add('buyer.address', 'too-long')
-  if (buyer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanText(buyer.email))) add('buyer.email', 'bad-email')
+  if (emailProblem(buyer.email)) add('buyer.email', emailProblem(buyer.email))
 
   const lines = draft.lines || []
   if (lines.length === 0) add('lines', 'no-lines')

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { readSheet, readHtmlTable } from '../src/import/xls.js'
 import { importBuyers, importProducts } from '../src/import/factureroMovil.js'
 import { productProblems, lineFromProduct } from '../src/lib/products.js'
+import { buyerProblems } from '../src/lib/buyers.js'
 
 // Archivos SINTÉTICOS con la forma de los reportes de Facturero Móvil: los .xls de clientes
 // los genera LibreOffice (Excel 97-2003 de verdad) y el de bienes es una tabla HTML como la
@@ -36,7 +37,7 @@ test('clients report: each row says whether it goes in and why not', () => {
     ['Juan Pérez', '05', '1710034065', 'new', []],
     ['Sin Correo Cía.', '04', '1790011674001', 'invalid', ['import-duplicate-row']],    // sin correo entraría: lo frena la fila repetida
     ['Visitante', '08', 'AB123456', 'exists', []],
-    ['Correo Malo', '06', 'P998877', 'invalid', ['bad-email']],
+    ['Correo Malo', '06', 'P998877', 'new', []],                          // el correo que no vale se quita; la fila entra
     ['CONSUMIDOR FINAL', '07', '9999999999999', 'skip', ['import-final-consumer']],
   ])
 })
@@ -76,4 +77,22 @@ test('products: required fields, unique code, and what a product puts on an invo
   assert.deepEqual(productProblems({ code: '', description: '', unitPrice: 'x', vatCode: '2' }, []).map((x) => `${x.path}:${x.code}`),
     ['product.code:required', 'product.description:required', 'product.unitPrice:bad-number', 'product.vatCode:required'])
   assert.deepEqual(lineFromProduct(p), { productKey: 'p1', code: 'SRV-001', auxCode: '', description: 'Consultoría', unit: 'Horas', unitPrice: '133.93', vatCode: '4' })
+})
+
+test('emails: several separated by commas are kept; the ones that are not emails are dropped and said', () => {
+  const header = ['Razón Social', 'Tipo Identificación', 'Identificación', 'Email']
+  const rows = [header,
+    ['Varios', 'RUC', '1790011674001', 'a@example.com,b@example.com; c@example.com'],
+    ['Mezcla', 'Cédula', '1710034065', 'bien@example.com, no-es-correo'],
+    ['Ninguno', 'Pasaporte', 'P1', 'no-es-correo'],
+  ]
+  const items = importBuyers(rows, []).items.map((i) => [i.buyer.email, i.status, i.notes.map((n) => n.code)])
+  assert.deepEqual(items, [
+    ['a@example.com, b@example.com, c@example.com', 'new', []],
+    ['bien@example.com', 'new', ['import-email-partial']],
+    ['', 'new', ['import-email-dropped']],
+  ])
+  // Y a mano: una lista bien escrita vale; con un trozo malo, se señala.
+  assert.deepEqual(buyerProblems({ idType: '06', id: 'P2', name: 'X', email: 'a@example.com; b@example.com' }, []), [])
+  assert.deepEqual(buyerProblems({ idType: '06', id: 'P2', name: 'X', email: 'a@example.com, nada' }, []).map((p) => p.code), ['bad-email'])
 })

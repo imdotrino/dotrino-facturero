@@ -88,6 +88,7 @@ async function confirm () {
               <td>
                 <span class="chip" :class="{ authorized: item.status === 'new', rejected: item.status === 'invalid' }">{{ t(`import.statuses.${item.status}`) }}</span>
                 <span v-for="p in item.problems" :key="p.path + p.code" class="block small problem">{{ t(`import.fields.${p.path.split('.')[1]}`) }}: {{ t(`problems.${p.code}`) }}</span>
+                <span v-for="n in item.notes || []" :key="'note' + n.path + n.code" class="block small muted" data-testid="import-note">{{ t(`import.fields.${n.path.split('.')[1]}`) }}: {{ t(`problems.${n.code}`) }}</span>
               </td>
             </tr>
           </tbody>

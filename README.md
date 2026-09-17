@@ -67,7 +67,9 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 - **Dónde viven:** se registran en su pestaña (o desde la factura) y se guardan en
   `facturero.buyers`. Son de **todos** los emisores.
 - **Qué se pide:** identificación y nombres o razón social. Correo, teléfono y dirección son
-  opcionales; un correo que se ponga tiene que tener forma de correo. No se registra dos veces
+  opcionales; un correo que se ponga tiene que tener forma de correo, y puede haber varios
+  separados por comas (van juntos en el campo adicional «Email»). Al **importar**, lo que no
+  es un correo se quita y el cliente entra igual, con una nota en su fila. No se registra dos veces
   la misma identificación. El correo **no** es obligatorio (dueño, 2026-09-16): la tabla 13 de
   la ficha que lo marca así es la del registro de clientes del sistema gratuito del SRI, no una
   regla de la factura (en el XML va como campo adicional opcional).
