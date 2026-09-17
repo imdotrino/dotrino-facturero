@@ -362,6 +362,9 @@ textarea { font: inherit; color: var(--text); background: var(--surface-low); bo
 
 @media print {
   body > :not(.ride-print) { display: none !important; }
+  /* Y lo que una extensión cuelga FUERA del body (el gestor de contraseñas de Dotrino lo hacía
+     y su aviso salía en el PDF): en el papel solo va la factura. */
+  html > :not(head):not(body) { display: none !important; }
   html, body { background: #fff; color: #000; }
   .ride-print { display: block; }
   @page { size: A4; margin: 12mm; }
