@@ -18,6 +18,7 @@ const info = ref(false)
 
 const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'long' }).format(new Date(iso))
 const signatureOf = (issuer) => state.signatures.find((s) => s.issuerId === issuer.id) || null
+const logoOf = (issuer) => state.logos.find((l) => l.issuerId === issuer.id) || null
 const problemsOf = (issuer) => issuerProblems(issuer, { issuers: state.issuers, signatures: state.signatures })
 const nextNumber = (i) => `${i.establishment}-${i.emissionPoint}-${String(i.nextSequential).padStart(9, '0')}`
 const sortedIssuers = computed(() => [...state.issuers].sort((a, b) =>
@@ -83,12 +84,15 @@ async function confirmRemove () {
         <li v-for="issuer in sortedIssuers" :key="issuer.id" class="sub-card" :data-issuer-id="issuer.id" data-testid="issuer-item">
           <IssuerForm
             v-if="editing === issuer.id"
-            :issuer="formIssuer" :issuers="state.issuers" :signatures="state.signatures"
+            :issuer="formIssuer" :issuers="state.issuers" :signatures="state.signatures" :logos="state.logos"
             @saved="onSaved" @cancel="close"
           />
           <template v-else>
             <div class="row between">
-              <strong>{{ issuerName(issuer) }}</strong>
+              <span class="row">
+                <img v-if="logoOf(issuer)" :src="logoOf(issuer).dataUrl" alt="" class="logo-thumb" data-testid="issuer-logo-thumb" />
+                <strong>{{ issuerName(issuer) }}</strong>
+              </span>
               <span class="chip" :class="issuer.environment === '2' ? 'authorized' : 'test'">{{ issuer.environment === '2' ? t('settings.envProd') : t('settings.envTest') }}</span>
             </div>
             <p class="muted small">RUC {{ issuer.ruc }} · {{ t('settings.nextInvoice') }} {{ nextNumber(issuer) }}</p>
@@ -121,7 +125,7 @@ async function confirmRemove () {
 
       <div v-if="editing === 'new'" class="sub-card" data-testid="new-issuer">
         <h3>{{ copyFrom ? t('settings.duplicateTitle', { name: issuerName(copyFrom) }) : t('settings.newIssuer') }}</h3>
-        <IssuerForm :issuer="formIssuer" :copy-from="copyFrom" :issuers="state.issuers" :signatures="state.signatures" @saved="onSaved" @cancel="close" />
+        <IssuerForm :issuer="formIssuer" :copy-from="copyFrom" :issuers="state.issuers" :signatures="state.signatures" :logos="state.logos" @saved="onSaved" @cancel="close" />
       </div>
       <button class="btn" :disabled="editing !== null" data-testid="add-issuer" @click="addIssuer">+ {{ t('settings.addIssuer') }}</button>
     </section>

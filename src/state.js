@@ -2,7 +2,7 @@
 // NO viven aquí: un Proxy reactivo de Vue rompe el postMessage de los iframes y el uso
 // de una CryptoKey. Aquí solo hay datos planos.
 import { reactive } from 'vue'
-import { listIssuers, listBuyers, listProducts } from './lib/repo.js'
+import { listIssuers, listBuyers, listProducts, listLogos } from './lib/repo.js'
 import { storedSignatures, onSignerChange } from './lib/signature.js'
 import { readyIssuers } from './lib/issuers.js'
 import { getStore } from './services/store.js'
@@ -15,6 +15,7 @@ export const state = reactive({
   signatures: [],
   buyers: [],
   products: [],
+  logos: [],       // [{ issuerId, dataUrl, width, height }]
   // Respaldo del almacén en la bóveda (`store.vault` de @dotrino/store). Se lee y se escribe
   // siempre en el navegador; esto dice si además está a salvo en la bóveda, y si no, por qué.
   backup: null,
@@ -71,9 +72,10 @@ export async function syncBackup () {
 }
 
 export async function refreshSettings () {
-  const [issuers, signatures, buyers, products] = await Promise.all([listIssuers(), storedSignatures(), listBuyers(), listProducts()])
+  const [issuers, signatures, buyers, products, logos] = await Promise.all([listIssuers(), storedSignatures(), listBuyers(), listProducts(), listLogos()])
   state.issuers = issuers
   state.signatures = signatures
+  state.logos = logos
   state.buyers = buyers
   state.products = products
 }

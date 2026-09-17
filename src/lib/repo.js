@@ -4,6 +4,8 @@
 //                                                                   siguiente secuencial
 //                                 { id: 'signature:<uuid>', … }   la firma electrónica DE ESE emisor,
 //                                                                   SELLADA (mismo uuid)
+//                                 { id: 'logo:<uuid>', logo }     el logo de ese emisor para su RIDE,
+//                                                                   ya reducido (ver lib/logo.js)
 //                                 { id: 'draft', draft }          la factura a medio escribir
 //   facturero.buyers              un comprador registrado por entrada; id = uuid. Son de
 //                                 todos los emisores («consumidor final» no se guarda: es fijo)
@@ -29,6 +31,7 @@ const BUYERS = 'facturero.buyers'
 const PRODUCTS = 'facturero.products'
 const ISSUER_PREFIX = 'issuer:'
 const SIGNATURE_PREFIX = 'signature:'
+const LOGO_PREFIX = 'logo:'
 
 export const EMPTY_ISSUER = Object.freeze({
   ruc: '',
@@ -85,8 +88,9 @@ export async function saveIssuer (issuer) {
   return { ...data, id: issuerId }
 }
 
-/** Quita el emisor y su firma. Las facturas ya emitidas se quedan (llevan su copia). */
+/** Quita el emisor, su firma y su logo. Las facturas ya emitidas se quedan (llevan su copia). */
 export async function removeIssuer (issuerId) {
+  await removeSetting(LOGO_PREFIX + issuerId)
   await removeSetting(SIGNATURE_PREFIX + issuerId)
   return removeSetting(ISSUER_PREFIX + issuerId)
 }
@@ -108,6 +112,24 @@ export async function getSignatureRecord (issuerId) {
 
 export function saveSignatureRecord (issuerId, { envelope, sealedBy, info, fileName }) {
   return writeSetting(SIGNATURE_PREFIX + issuerId, { envelope, sealedBy, info, fileName })
+}
+
+// ---------- el logo de cada emisor ----------
+
+// Aparte del emisor y no dentro: el emisor se reescribe en cada factura (sube el secuencial),
+// y el logo no tiene por qué viajar otra vez a la bóveda cada vez.
+export async function listLogos () {
+  return (await settings())
+    .filter((e) => e.id.startsWith(LOGO_PREFIX))
+    .map((e) => ({ ...e.logo, issuerId: e.id.slice(LOGO_PREFIX.length) }))
+}
+
+export function saveLogo (issuerId, { dataUrl, width, height }) {
+  return writeSetting(LOGO_PREFIX + issuerId, { logo: { dataUrl, width, height } })
+}
+
+export function removeLogo (issuerId) {
+  return removeSetting(LOGO_PREFIX + issuerId)
 }
 
 // ---------- compradores ----------

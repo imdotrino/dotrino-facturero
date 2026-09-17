@@ -5,6 +5,8 @@ import { toast } from '../state.js'
 import { EMPTY_ISSUER, saveIssuer } from '../lib/repo.js'
 import { issuerDataProblems, issuerName } from '../lib/issuers.js'
 import { openSignatureFile, attachSignature, copySignature } from '../lib/signature.js'
+import { saveLogo, removeLogo } from '../lib/repo.js'
+import { prepareLogo, LOGO_TYPES, LOGO_MAX_FILE_BYTES } from '../lib/logo.js'
 import { cleanText } from '../sri/invoice.js'
 
 const props = defineProps({
@@ -12,6 +14,7 @@ const props = defineProps({
   copyFrom: { type: Object, default: null },      // emisor original al duplicar
   issuers: { type: Array, required: true },
   signatures: { type: Array, required: true },
+  logos: { type: Array, required: true },
 })
 const emit = defineEmits(['saved', 'cancel'])
 
@@ -30,6 +33,37 @@ const needsFile = computed(() => !kept.value || replacing.value)
 const file = ref(null)
 const password = ref('')
 const signatureError = ref('')
+
+// El logo: el que ya tiene, el del original si es una copia, o uno nuevo ya reducido. Se
+// reduce al elegirlo, para ver cómo queda y avisar antes de guardar si no sirve.
+const currentLogo = computed(() => props.logos.find((l) => l.issuerId === props.issuer?.id) || null)
+const sourceLogo = computed(() => props.copyFrom ? props.logos.find((l) => l.issuerId === props.copyFrom.id) || null : null)
+const newLogo = ref(null)
+const dropLogo = ref(false)
+const logoError = ref('')
+const logoInput = ref(null)
+const shownLogo = computed(() => newLogo.value || (dropLogo.value ? null : currentLogo.value || sourceLogo.value))
+const logoMaxMb = LOGO_MAX_FILE_BYTES / (1024 * 1024)
+
+async function onLogo (e) {
+  const picked = e.target.files?.[0]
+  logoError.value = ''
+  if (!picked) return
+  try {
+    newLogo.value = await prepareLogo(picked)
+    dropLogo.value = false
+  } catch (err) {
+    console.error('[facturero] logo:', err)
+    logoError.value = errorText(err)
+    if (logoInput.value) logoInput.value.value = ''
+  }
+}
+
+function clearLogo () {
+  newLogo.value = null
+  dropLogo.value = true
+  if (logoInput.value) logoInput.value.value = ''
+}
 
 function onFile (e) {
   file.value = e.target.files?.[0] || null
@@ -87,6 +121,9 @@ async function submit () {
     const saved = await saveIssuer(normalized())
     if (opened) await attachSignature(saved.id, opened)
     else if (!current.value && source.value) await copySignature(props.copyFrom.id, saved.id)
+    if (newLogo.value) await saveLogo(saved.id, newLogo.value)
+    else if (dropLogo.value) { if (currentLogo.value) await removeLogo(saved.id) }
+    else if (!currentLogo.value && sourceLogo.value) await saveLogo(saved.id, sourceLogo.value)
     password.value = ''
     emit('saved', saved)
   } catch (e) {
@@ -173,6 +210,20 @@ async function submit () {
           <option value="popular">{{ t('settings.rimpePopular') }}</option>
         </select>
       </label>
+
+      <div class="field wide sub-card" data-testid="issuer-logo">
+        <span class="label-row">{{ t('settings.logo') }}</span>
+        <img v-if="shownLogo" :src="shownLogo.dataUrl" :alt="t('settings.logo')" class="logo-preview" data-testid="issuer-logo-preview" />
+        <p v-else class="muted small">{{ t('settings.noLogo') }}</p>
+        <label class="field">
+          <span>{{ t('settings.logoFile', { max: logoMaxMb }) }}</span>
+          <input ref="logoInput" type="file" :accept="LOGO_TYPES.join(',')" data-testid="issuer-logo-file" @change="onLogo" />
+        </label>
+        <div class="actions wrap">
+          <button type="button" class="btn small ghost" :disabled="!shownLogo" data-testid="issuer-logo-remove" @click="clearLogo">{{ t('settings.removeLogo') }}</button>
+        </div>
+        <p v-if="logoError" class="problem" role="alert" data-testid="issuer-logo-error">{{ logoError }}</p>
+      </div>
 
       <div class="field wide sub-card" data-testid="issuer-signature">
         <span class="label-row">{{ t('settings.signature') }}</span>

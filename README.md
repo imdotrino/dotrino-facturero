@@ -60,6 +60,12 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 - **Copia del emisor en la factura:** cada factura guarda su `issuerId` y una copia del emisor
   al emitirla. Si luego se edita o se borra el emisor, el RIDE sigue saliendo con los datos
   originales.
+- **Logo del emisor** (opcional): sale arriba del recuadro del emisor en el RIDE. Se reduce en
+  el aparato al elegirlo (`src/lib/logo.js`: máx. 600×300 px sobre blanco, PNG → WebP → JPEG
+  hasta caber en 150 KB) y se guarda aparte como `logo:<issuerId>`, para que subir el
+  secuencial en cada factura no vuelva a copiar la imagen a la bóveda. **Duplicar** lo copia;
+  quitarlo en la copia no toca el original; se borra con el emisor. El RIDE usa el logo que el
+  emisor tiene **hoy** (la factura no guarda copia): si el emisor ya no existe, sale sin logo.
 - Las reglas sobre la lista de emisores viven en `src/lib/issuers.js`, sin almacén ni interfaz.
 
 ### Compradores

@@ -29,6 +29,7 @@ const TYPES = {
 const PASSWORD = 'clave ñ 1'
 
 const IMPORT_FIXTURES = fileURLToPath(new URL('../fixtures/import/', import.meta.url))
+const LOGO = fileURLToPath(new URL('../fixtures/logo.png', import.meta.url))
 
 const pki = makePki({ leaves: [{ name: 'FIRMA DE PRUEBA FACTURERO', keyUsage: 'digitalSignature,nonRepudiation' }] })
 const dir = await mkdtemp(join(tmpdir(), 'facturero-e2e-'))
@@ -81,6 +82,16 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await form.getByTestId('issuer-trade-name').fill('Tienda Uno')
   await form.getByTestId('issuer-matrix-address').fill('Av. Amazonas y Colón')
   await form.getByTestId('issuer-next-sequential').fill(sequential)
+  // El logo: una imagen que no lo es se rechaza al elegirla; una de 1200×400 se reduce y se ve.
+  await form.getByTestId('issuer-logo-file').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from('no soy una imagen') })
+  await form.getByTestId('issuer-logo-error').filter({ hasText: 'No se pudo leer la imagen' }).waitFor()
+  assert.equal(await form.getByTestId('issuer-logo-remove').isDisabled(), true, 'sin logo, «Quitar logo» se ve pero apagado')
+  await form.getByTestId('issuer-logo-file').setInputFiles(LOGO)
+  await form.getByTestId('issuer-logo-preview').waitFor()
+  const reduced = await form.getByTestId('issuer-logo-preview').evaluate((img) => ({ w: img.naturalWidth, h: img.naturalHeight, bytes: img.src.length }))
+  assert.equal(reduced.w, 600, 'se reduce a 600 px de ancho')
+  assert.equal(reduced.h, 200, 'sin deformarlo')
+  assert.ok(reduced.bytes <= 150 * 1024, `y cabe en el almacén (${reduced.bytes})`)
   // Sin firma no se guarda.
   await form.getByTestId('save-issuer').click()
   await form.getByTestId('issuer-signature').getByText('Obligatorio').waitFor()
@@ -95,11 +106,13 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await card('Tienda Uno').waitFor({ timeout: 20_000 })
   assert.match(await card('Tienda Uno').getByTestId('issuer-signature-summary').innerText(), /FIRMA DE PRUEBA FACTURERO/)
   assert.match(await card('Tienda Uno').getByTestId('signature-state').innerText(), /Desbloqueada/)
+  await card('Tienda Uno').getByTestId('issuer-logo-thumb').waitFor()
 
   // --- duplicarlo: la copia lleva la firma del original y choca por serie hasta cambiarla
   await card('Tienda Uno').getByTestId('duplicate-issuer').click()
   const copy = page.getByTestId('new-issuer')
   assert.match(await copy.getByTestId('issuer-signature-kept').innerText(), /FIRMA DE PRUEBA FACTURERO/)
+  await copy.getByTestId('issuer-logo-preview').waitFor()   // la copia trae el logo del original
   await copy.getByTestId('issuer-trade-name').fill('Tienda Dos')
   await copy.getByTestId('save-issuer').click()
   await copy.getByText('compartirían la numeración').waitFor()
@@ -109,6 +122,16 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await card('Tienda Dos').waitFor()
   assert.equal(await page.getByTestId('issuer-item').count(), 2)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Desbloqueada/)
+  await card('Tienda Dos').getByTestId('issuer-logo-thumb').waitFor()
+  // Quitarlo en la copia no toca el del original.
+  // Editándolo, el nombre está en un campo y no en el texto: se sigue a la tarjeta por su id.
+  const dosCard = page.locator(`[data-issuer-id="${await card('Tienda Dos').getAttribute('data-issuer-id')}"]`)
+  await dosCard.getByTestId('edit-issuer').click()
+  await dosCard.getByTestId('issuer-logo-remove').click()
+  await dosCard.getByTestId('save-issuer').click()
+  await dosCard.getByTestId('edit-issuer').waitFor()
+  assert.equal(await dosCard.getByTestId('issuer-logo-thumb').count(), 0)
+  assert.equal(await card('Tienda Uno').getByTestId('issuer-logo-thumb').count(), 1)
 
   // --- cada emisor se bloquea por su cuenta
   await card('Tienda Uno').getByTestId('lock').click()
@@ -278,6 +301,9 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await page.getByTestId('tab-settings').click()
   assert.match(await card('Tienda Uno').getByTestId('signature-state').innerText(), /Bloqueada/)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Bloqueada/)
+  // El logo sobrevive a recargar la página: está en el almacén.
+  assert.equal(await card('Tienda Uno').getByTestId('issuer-logo-thumb').count(), 1)
+  assert.equal(await card('Tienda Dos').getByTestId('issuer-logo-thumb').count(), 0)
   assert.match(await card('Tienda Uno').innerText(), new RegExp(`001-001-${sequential.padStart(9, '0')}`))
   assert.match(await card('Tienda Dos').innerText(), new RegExp(`001-002-${String(Number(sequential) + 1).padStart(9, '0')}`))
 
@@ -299,8 +325,8 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Desbloqueada/)
 
   // Los únicos errores de consola aceptables son los que la app registra a propósito al
-  // probar la contraseña mala.
-  const unexpected = problems.filter((p) => !/bad-password|does not open this signature file/.test(p))
+  // probar la contraseña mala y la imagen que no es imagen.
+  const unexpected = problems.filter((p) => !/bad-password|does not open this signature file|\[facturero\] logo: Error: the image could not be read/.test(p))
   assert.deepEqual(unexpected, [])
   await ctx.close()
 })

@@ -372,6 +372,7 @@ textarea { font: inherit; color: var(--text); background: var(--surface-low); bo
 .ride h1 { font-family: Arial, Helvetica, sans-serif; font-size: 13pt; margin: 0 0 4pt; }
 .ride-top { display: grid; grid-template-columns: 1fr 1fr; gap: 6pt; }
 .ride-box { border: 1px solid #000; border-radius: 6pt; padding: 6pt; margin-bottom: 6pt; }
+.ride-logo { display: block; max-width: 100%; max-height: 60pt; object-fit: contain; margin-bottom: 4pt; }
 .ride-title { font-size: 13pt; font-weight: 700; }
 .ride-ruc { font-size: 11pt; }
 .ride-barcode svg { width: 100%; height: 40pt; display: block; }
@@ -381,3 +382,7 @@ textarea { font: inherit; color: var(--text); background: var(--surface-low); bo
 .ride-table th { background: #eee; }
 .ride-bottom { display: grid; grid-template-columns: 1.3fr 1fr; gap: 6pt; align-items: start; }
 .ride-totals .grand td { font-weight: 700; }
+
+/* Logo del emisor: la vista previa en su formulario y la miniatura en su tarjeta. */
+.logo-preview { display: block; max-width: 100%; max-height: 90px; object-fit: contain; background: #fff; border: 1px solid var(--outline-variant); border-radius: 6px; padding: 4px; }
+.logo-thumb { width: 32px; height: 32px; object-fit: contain; background: #fff; border-radius: 4px; }

@@ -5,6 +5,7 @@
 // sin número de autorización no tiene validez.
 import { computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { t } from '../i18n.js'
+import { state } from '../state.js'
 import { code128Svg } from '../lib/code128.js'
 import { sriDateTime } from '../lib/format.js'
 import { VAT_RATES, RIMPE_LEGENDS, PAYMENT_METHODS } from '../sri/catalog.js'
@@ -14,6 +15,9 @@ const emit = defineEmits(['done'])
 
 const inv = computed(() => props.invoice)
 const issuer = computed(() => inv.value.issuer)
+// El logo es el que el emisor tiene HOY: la factura no guarda una copia (pesaría en cada una).
+// Si el emisor ya no existe, el RIDE sale sin logo.
+const logo = computed(() => state.logos.find((l) => l.issuerId === inv.value.issuerId) || null)
 const buyer = computed(() => inv.value.draft.buyer)
 const finalConsumer = computed(() => buyer.value.idType === '07')
 const barcode = computed(() => code128Svg(inv.value.accessKey, { height: 50 }))
@@ -51,6 +55,7 @@ onBeforeUnmount(() => window.removeEventListener('afterprint', afterPrint))
       <div class="ride">
         <div class="ride-top">
           <div class="ride-box ride-issuer">
+            <img v-if="logo" :src="logo.dataUrl" alt="" class="ride-logo" />
             <h1>{{ issuer.tradeName || issuer.legalName }}</h1>
             <p v-if="issuer.tradeName"><strong>{{ issuer.legalName }}</strong></p>
             <p><strong>{{ t('ride.matrix') }}:</strong> {{ issuer.matrixAddress }}</p>
