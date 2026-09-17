@@ -34,7 +34,7 @@ test('clients report: each row says whether it goes in and why not', () => {
   assert.deepEqual(summary, [
     ['ÑANDÚ COMERCIAL S.A.', '04', '1790011674001', 'new', []],          // apóstrofo de Excel quitado
     ['Juan Pérez', '05', '1710034065', 'new', []],
-    ['Sin Correo Cía.', '04', '1790011674001', 'invalid', ['required', 'import-duplicate-row']],
+    ['Sin Correo Cía.', '04', '1790011674001', 'invalid', ['import-duplicate-row']],    // sin correo entraría: lo frena la fila repetida
     ['Visitante', '08', 'AB123456', 'exists', []],
     ['Correo Malo', '06', 'P998877', 'invalid', ['bad-email']],
     ['CONSUMIDOR FINAL', '07', '9999999999999', 'skip', ['import-final-consumer']],

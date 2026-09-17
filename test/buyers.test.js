@@ -14,10 +14,11 @@ test('final consumer carries the values of the SRI table 6', () => {
   assert.equal(resolveBuyer(FINAL_CONSUMER_KEY, []), FINAL_CONSUMER)
 })
 
-test('a registered buyer needs ID, name and email (table 13); phone and address are optional', () => {
+test('a registered buyer needs ID and name; email, phone and address are optional (an email that is given must look like one)', () => {
   assert.deepEqual(buyerProblems(juan, []), [])
   const codes = buyerProblems({ idType: '05', id: '1710034066', name: '', email: '' }, []).map((p) => `${p.path}:${p.code}`)
-  assert.deepEqual(codes, ['buyer.id:bad-cedula', 'buyer.name:required', 'buyer.email:required'])
+  assert.deepEqual(codes, ['buyer.id:bad-cedula', 'buyer.name:required'])
+  assert.deepEqual(buyerProblems({ ...juan, key: undefined, id: '1710034073', email: '' }, [juan]), [])
   assert.deepEqual(buyerProblems({ ...juan, email: 'no-es-correo' }, []).map((p) => p.code), ['bad-email'])
   assert.deepEqual(buyerProblems({ ...empresa, id: '1760013210000' }, []).map((p) => p.code), ['bad-ruc'])
   assert.deepEqual(buyerProblems({ idType: '06', id: 'AB123456', name: 'Visitante', email: 'v@example.com' }, []), [])

@@ -115,7 +115,7 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await card('Tienda Uno').getByTestId('signature-state').filter({ hasText: 'Bloqueada' }).waitFor()
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Desbloqueada/)
 
-  // --- compradores: consumidor final es fijo; los demás se registran (correo obligatorio)
+  // --- compradores: consumidor final es fijo; los demás se registran (el correo es opcional)
   await page.getByTestId('tab-buyers').click()
   const fcItem = page.locator('[data-buyer-key="final-consumer"]')
   await fcItem.waitFor()
@@ -127,9 +127,8 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   await newBuyer.getByTestId('buyer-name').fill('Juan Pérez')
   await newBuyer.getByTestId('save-buyer').click()
   await newBuyer.getByText('La cédula no es válida').waitFor()
-  await newBuyer.getByText('Obligatorio').waitFor() // el correo
+  assert.equal(await newBuyer.getByText('Obligatorio').count(), 0, 'sin correo no falta nada: es opcional')
   await newBuyer.getByTestId('buyer-id').fill('1710034065')
-  await newBuyer.getByTestId('buyer-email').fill('juan@example.com')
   await newBuyer.getByTestId('save-buyer').click()
   await page.getByTestId('buyer-item').filter({ hasText: 'Juan Pérez' }).waitFor()
 

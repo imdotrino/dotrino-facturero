@@ -66,9 +66,11 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
 
 - **Dónde viven:** se registran en su pestaña (o desde la factura) y se guardan en
   `facturero.buyers`. Son de **todos** los emisores.
-- **Qué se pide:** lo de la tabla 13 de la ficha. Identificación, nombres o razón social y
-  **correo** son obligatorios; teléfono y dirección, opcionales. No se registra dos veces la
-  misma identificación.
+- **Qué se pide:** identificación y nombres o razón social. Correo, teléfono y dirección son
+  opcionales; un correo que se ponga tiene que tener forma de correo. No se registra dos veces
+  la misma identificación. El correo **no** es obligatorio (dueño, 2026-09-16): la tabla 13 de
+  la ficha que lo marca así es la del registro de clientes del sistema gratuito del SRI, no una
+  regla de la factura (en el XML va como campo adicional opcional).
 - **«Consumidor final»:** es fijo (07 · 9999999999999 · CONSUMIDOR FINAL, tabla 6), no se
   guarda ni se edita, y es el comprador **por defecto** de cada factura (§9.10). Por encima
   de USD 50 hay que elegir o registrar al comprador.

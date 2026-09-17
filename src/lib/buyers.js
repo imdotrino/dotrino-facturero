@@ -5,9 +5,11 @@
 // el "Consumidor final", para que por defecto se identifique en ventas a consumidores
 // finales»). Sus valores son los de la tabla 6: tipo 07, 13 nueves, CONSUMIDOR FINAL.
 //
-// Lo que se pide al registrar un comprador sigue la tabla 13 de la ficha: identificación y
-// nombres o razón social obligatorios, **correo obligatorio** (a él va la factura), teléfono
-// y dirección opcionales.
+// Lo que se pide al registrar un comprador: identificación y nombres o razón social. Correo,
+// teléfono y dirección son opcionales. El correo NO es obligatorio (dueño, 2026-09-16): la
+// tabla 13 de la ficha que lo marcaba así es la del registro de clientes del sistema gratuito
+// del SRI, no una regla de la factura —el XSD lo trae como campo adicional opcional y el SRI
+// autoriza sin él—, y facturero no manda correos. Si viene, se valida que tenga forma de correo.
 
 import { cleanText, isCedula, isRuc } from '../sri/invoice.js'
 import { FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from '../sri/catalog.js'
@@ -53,8 +55,7 @@ export function buyerProblems (buyer, buyers = []) {
   else if (b.id.length > 20) add('buyer.id', 'too-long')
   if (!b.name) add('buyer.name', 'required')
   else if (b.name.length > 300) add('buyer.name', 'too-long')
-  if (!b.email) add('buyer.email', 'required')
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) add('buyer.email', 'bad-email')
+  if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) add('buyer.email', 'bad-email')
   if (b.address.length > 300) add('buyer.address', 'too-long')
   if (b.id && buyers.some((o) => o.key !== b.key && o.idType === b.idType && o.id === b.id)) add('buyer.id', 'duplicate-buyer')
   return problems
