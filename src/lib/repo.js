@@ -6,7 +6,10 @@
 //                                                                   SELLADA (mismo uuid)
 //                                 { id: 'logo:<uuid>', logo }     el logo de ese emisor para su RIDE,
 //                                                                   ya reducido (ver lib/logo.js)
-//                                 { id: 'draft', draft }          la factura a medio escribir
+//                                 { id: 'draft', draft }          la factura a medio escribir (el
+//                                                                   formulario, autoguardado)
+//   facturero.drafts              un borrador GUARDADO por entrada; id = uuid. El usuario lo
+//                                 aparta para terminarlo luego (ver lib/drafts.js)
 //   facturero.buyers              un comprador registrado por entrada; id = uuid. Son de
 //                                 todos los emisores («consumidor final» no se guarda: es fijo)
 //   facturero.products            un producto o servicio por entrada; id = uuid. También de
@@ -24,11 +27,13 @@
 // Escribir con el mismo id actualiza la entrada (el almacén fusiona por id).
 
 import { getStore } from '../services/store.js'
+import { isBlankDraft, toSaved } from './drafts.js'
 
 const SETTINGS = 'facturero.settings'
 const INVOICES_PREFIX = 'facturero.invoices.'
 const BUYERS = 'facturero.buyers'
 const PRODUCTS = 'facturero.products'
+const DRAFTS = 'facturero.drafts'
 const ISSUER_PREFIX = 'issuer:'
 const SIGNATURE_PREFIX = 'signature:'
 const LOGO_PREFIX = 'logo:'
@@ -192,18 +197,64 @@ export async function removeProduct (key) {
 
 // ---------- borrador ----------
 
+// La última escritura del borrador. El formulario lo guarda al desmontarse sin esperar, y
+// leerlo justo después (p. ej. «Continuar» un guardado) podía adelantarse a esa escritura y
+// perder lo último que se escribió. Leer espera a que termine; si falló, ya lo dijo quien
+// la lanzó.
+let draftWrite = Promise.resolve()
+
+function trackDraftWrite (p) {
+  draftWrite = p.catch(() => {})
+  return p
+}
+
 /** Borrador de la factura a medio escribir: sobrevive a una recarga de la página. */
 export async function loadDraft () {
+  await draftWrite
   const e = (await settings()).find((x) => x.id === 'draft')
   return e ? e.draft : null
 }
 
 export function saveDraft (draft) {
-  return writeSetting('draft', { draft })
+  return trackDraftWrite(writeSetting('draft', { draft }))
 }
 
 export function clearDraft () {
-  return removeSetting('draft')
+  return trackDraftWrite(removeSetting('draft'))
+}
+
+// ---------- borradores guardados ----------
+
+/** Los borradores guardados, el más reciente primero: `{ key, savedAt, draft }`. */
+export async function listSavedDrafts () {
+  const store = await getStore()
+  return (await store.listThread(DRAFTS))
+    .map((e) => ({ key: e.id, savedAt: e.savedAt, draft: e.draft }))
+    .sort((a, b) => b.savedAt - a.savedAt)
+}
+
+/** Guarda un borrador. Con `key` actualiza ese; sin él, es uno nuevo. Devuelve la clave. */
+export async function saveSavedDraft (draft, key) {
+  const entryId = key || crypto.randomUUID()
+  const store = await getStore()
+  const now = Date.now()
+  await store.appendMessage(DRAFTS, { id: entryId, ts: now, savedAt: now, draft: toSaved(draft) })
+  return entryId
+}
+
+export async function removeSavedDraft (key) {
+  const store = await getStore()
+  return store.removeMessage(DRAFTS, key)
+}
+
+/**
+ * Pasa un borrador guardado al formulario. Si en el formulario había otro con algo escrito,
+ * no se pierde: se guarda antes (en su sitio si venía de uno guardado).
+ */
+export async function resumeSavedDraft (saved) {
+  const current = await loadDraft()
+  if (!isBlankDraft(current) && current.savedKey !== saved.key) await saveSavedDraft(current, current.savedKey)
+  await saveDraft({ ...saved.draft, savedKey: saved.key })
 }
 
 // ---------- facturas ----------

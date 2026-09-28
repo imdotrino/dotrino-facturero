@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { t, errorText, lang } from '../i18n.js'
-import { state, usableIssuers, toast } from '../state.js'
+import { state, usableIssuers, refreshDrafts, toast } from '../state.js'
 import { issuerName } from '../lib/issuers.js'
-import { listInvoices } from '../lib/repo.js'
+import { listInvoices, resumeSavedDraft, removeSavedDraft } from '../lib/repo.js'
+import { resolveBuyer, buyerSnapshot } from '../lib/buyers.js'
+import { computeInvoice } from '../sri/invoice.js'
 import { ecuadorMonth, shiftMonth } from '../lib/dates.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
 import { zipStore } from '../lib/zip.js'
@@ -33,6 +35,59 @@ const visible = computed(() => {
 })
 // La descarga del mes respeta el filtro de emisor, no la búsqueda.
 const authorized = computed(() => invoices.value.filter((i) => i.status === 'authorized' && (!issuerFilter.value || i.issuerId === issuerFilter.value)))
+
+// ---------- borradores guardados ----------
+
+const removing = ref('')   // clave del borrador que pide confirmar que se quita
+
+function draftBuyer (d) {
+  return resolveBuyer(d.buyerKey, state.buyers)?.name || '—'
+}
+
+function draftLines (d) {
+  return (d.lines || []).map((l) => l.description.trim()).filter(Boolean).join(' · ')
+}
+
+function draftIssuer (d) {
+  const i = state.issuers.find((x) => x.id === d.issuerId)
+  return i ? issuerName(i) : ''
+}
+
+function draftTotal (d) {
+  const b = resolveBuyer(d.buyerKey, state.buyers)
+  try {
+    return money(computeInvoice({ ...d, buyer: b ? buyerSnapshot(b) : {} }).total)
+  } catch (e) {
+    if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(e.code)) throw e
+    return '—'
+  }
+}
+
+function savedAt (ms) {
+  return new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' }).format(new Date(ms))
+}
+
+async function resume (saved) {
+  try {
+    await resumeSavedDraft(saved)
+    await refreshDrafts()
+    emit('new')
+  } catch (e) {
+    console.error('[facturero] resume draft:', e)
+    toast(errorText(e), 'error')
+  }
+}
+
+async function removeDraft (key) {
+  removing.value = ''
+  try {
+    await removeSavedDraft(key)
+    await refreshDrafts()
+  } catch (e) {
+    console.error('[facturero] remove draft:', e)
+    toast(errorText(e), 'error')
+  }
+}
 
 function buyerName (i) {
   return i.draft.buyer.idType === '07' ? 'CONSUMIDOR FINAL' : i.draft.buyer.name
@@ -79,6 +134,31 @@ onMounted(load)
       <p v-else>{{ t('ready.noUsableIssuer') }}</p>
       <button class="btn primary" data-testid="go-settings" @click="emit('settings')">{{ t('ready.goSettings') }}</button>
     </div>
+
+    <section v-if="state.drafts.length" class="stack" data-testid="saved-drafts">
+      <h2 class="drafts-title">{{ t('list.drafts') }}</h2>
+      <ul class="invoice-list">
+        <li v-for="d in state.drafts" :key="d.key" class="invoice-item card draft-item" :data-draft-key="d.key" data-testid="saved-draft">
+          <span class="inv-main">
+            <strong>{{ draftBuyer(d.draft) }}</strong>
+            <span v-if="draftLines(d.draft)" class="draft-lines">{{ draftLines(d.draft) }}</span>
+            <span class="muted">{{ t('list.draftSavedAt', { date: savedAt(d.savedAt) }) }}</span>
+            <span v-if="draftIssuer(d.draft)" class="muted small">{{ draftIssuer(d.draft) }}</span>
+          </span>
+          <span class="inv-side">
+            <strong>{{ draftTotal(d.draft) }}</strong>
+            <span v-if="removing === d.key" class="row">
+              <button class="btn ghost small" data-testid="remove-draft-cancel" @click="removing = ''">{{ t('form.cancel') }}</button>
+              <button class="btn small danger" data-testid="remove-draft-confirm" @click="removeDraft(d.key)">{{ t('list.removeDraftConfirm') }}</button>
+            </span>
+            <span v-else class="row">
+              <button class="btn ghost small" :aria-label="t('list.removeDraft')" data-testid="remove-draft" @click="removing = d.key">{{ t('list.removeDraft') }}</button>
+              <button class="btn primary small" data-testid="resume-draft" @click="resume(d)">{{ t('list.resumeDraft') }}</button>
+            </span>
+          </span>
+        </li>
+      </ul>
+    </section>
 
     <div class="month-bar">
       <button class="btn icon" :aria-label="t('list.prevMonth')" :title="t('list.prevMonth')" data-testid="prev-month" @click="month = shiftMonth(month, -1)">‹</button>

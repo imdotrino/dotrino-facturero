@@ -284,6 +284,9 @@ textarea { font: inherit; color: var(--text); background: var(--surface-low); bo
 }
 .inv-main, .inv-side { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
 .inv-side { align-items: flex-end; }
+.draft-item { cursor: default; }
+.draft-lines { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drafts-title { margin: 0; }
 .big { font-size: 1.3rem; }
 
 .chip {

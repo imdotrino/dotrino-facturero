@@ -115,6 +115,7 @@ onMounted(() => {
         v-else-if="tab === 'new'"
         :correcting="correcting"
         @emitted="onEmitted"
+        @saved="setTab('invoices')"
         @cancel-correction="correcting = null; setTab('invoices')"
         @settings="setTab('settings')"
       />

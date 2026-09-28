@@ -126,6 +126,12 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   tope y descarta lo más viejo sin avisar; se abre con `maxPerThread: 50000` (compradores y
   productos pueden pasar de 1000 en un hilo). Las facturas se conservan 7 años.
 - El XML firmado y el autorizado van comprimidos con gzip.
+- **Borradores.** El formulario se autoguarda como `draft` en `facturero.settings` (uno solo).
+  «Guardar borrador» lo aparta en `facturero.drafts` (uno por entrada, id = uuid) y deja el
+  formulario vacío; se listan arriba en Facturas. Un borrador abierto desde ahí lleva
+  `savedKey`: guardarlo otra vez lo actualiza y emitirlo lo quita. «Continuar» guarda antes lo
+  que hubiera a medias en el formulario (`resumeSavedDraft`). `loadDraft` espera a la última
+  escritura del borrador, porque el formulario guarda al desmontarse sin esperar.
 - Separado **por perfil**, con `@dotrino/store` ≥ 0.10.0. Hasta 0.9.0 la moneda de support
   abría el store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
   `services/store.js` igual comprueba `store.profileId` antes de devolver el store.

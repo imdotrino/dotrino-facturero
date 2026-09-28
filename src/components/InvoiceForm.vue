@@ -1,14 +1,15 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, errorText } from '../i18n.js'
-import { state, usableIssuers, refreshSettings, toast } from '../state.js'
+import { state, usableIssuers, refreshSettings, refreshDrafts, toast } from '../state.js'
 import { computeInvoice, validate } from '../sri/invoice.js'
 import { VAT_RATES, DEFAULT_VAT_CODE, PAYMENT_METHODS } from '../sri/catalog.js'
 import { FINAL_CONSUMER_KEY, resolveBuyer, buyerSnapshot } from '../lib/buyers.js'
 import { emitInvoice, correctInvoice } from '../lib/emit.js'
 import { currentSigner } from '../lib/signature.js'
 import { issuerName } from '../lib/issuers.js'
-import { loadDraft, saveDraft, clearDraft } from '../lib/repo.js'
+import { loadDraft, saveDraft, clearDraft, saveSavedDraft, removeSavedDraft } from '../lib/repo.js'
+import { isBlankDraft, toSaved } from '../lib/drafts.js'
 import { money } from '../lib/format.js'
 import { requestUnlock } from './UnlockDialog.vue'
 import BuyerPicker from './BuyerPicker.vue'
@@ -16,7 +17,7 @@ import ProductPicker from './ProductPicker.vue'
 import { lineFromProduct } from '../lib/products.js'
 
 const props = defineProps({ correcting: { type: Object, default: null } })
-const emit = defineEmits(['emitted', 'cancel-correction', 'settings'])
+const emit = defineEmits(['emitted', 'saved', 'cancel-correction', 'settings'])
 
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
@@ -36,11 +37,14 @@ const showProblems = ref(false)
 const busy = ref(false)
 const progress = ref('')
 const confirm = reactive({ open: false, resolve: null })
+// Hasta que se lee el borrador guardado, el formulario no se deja tocar: lo que se escribiera
+// antes quedaría pisado al cargarlo.
 const loaded = ref(false)
 
 const buyer = computed(() => resolveBuyer(draft.buyerKey, state.buyers))
 // Lo que se valida, se muestra y se emite: el borrador con el comprador ya resuelto.
-const fullDraft = computed(() => ({ ...draft, buyer: buyer.value ? buyerSnapshot(buyer.value) : {} }))
+const fullDraft = computed(() => ({ ...toSaved(draft), buyer: buyer.value ? buyerSnapshot(buyer.value) : {} }))
+const blank = computed(() => isBlankDraft(draft))
 const choices = computed(() => usableIssuers())
 const issuer = computed(() => state.issuers.find((i) => i.id === draft.issuerId) || null)
 const ready = computed(() => Boolean(issuer.value) && choices.value.some((i) => i.id === issuer.value.id))
@@ -79,6 +83,8 @@ const vatLabel = (code) => t(`vat.${VAT_RATES.find((v) => v.code === code).key}`
 const lineSubtotal = (i) => totals.value?.lines[i]?.subtotal ?? '—'
 
 function replaceDraft (d) {
+  // Sin esto, `savedKey` de un borrador anterior se quedaría pegado al siguiente.
+  for (const k of Object.keys(draft)) delete draft[k]
   Object.assign(draft, emptyDraft(), JSON.parse(JSON.stringify(d)))
 }
 
@@ -144,6 +150,25 @@ async function reset () {
   await clearDraft().catch((e) => toast(errorText(e), 'error'))
 }
 
+// «Guardar borrador»: lo aparta en la lista de Facturas y deja el formulario vacío.
+async function saveForLater () {
+  busy.value = true
+  try {
+    await saveSavedDraft(draft, draft.savedKey)
+    replaceDraft(emptyDraft(draft.issuerId))
+    showProblems.value = false
+    await saveNow()
+    await refreshDrafts()
+    toast(t('form.draftSaved'))
+    emit('saved')
+  } catch (e) {
+    console.error('[facturero] save draft:', e)
+    toast(errorText(e), 'error')
+  } finally {
+    busy.value = false
+  }
+}
+
 function askConfirm () {
   return new Promise((resolve) => { Object.assign(confirm, { open: true, resolve }) })
 }
@@ -169,6 +194,7 @@ async function submit () {
 
   busy.value = true
   const onProgress = (step) => { progress.value = t(`form.progress.${step}`) }
+  const savedKey = draft.savedKey
   try {
     const invoice = props.correcting
       ? await correctInvoice(props.correcting, fullDraft.value, { onProgress })
@@ -179,6 +205,8 @@ async function submit () {
       replaceDraft(emptyDraft(draft.issuerId))
       showProblems.value = false
       await saveNow()
+      // Ya es una factura: el borrador guardado del que salió deja de estar pendiente.
+      if (savedKey) await removeSavedDraft(savedKey)
     }
     await refreshSettings()
     emit('emitted', invoice)
@@ -199,12 +227,14 @@ async function submit () {
       <button type="button" class="btn ghost small" @click="emit('cancel-correction')">{{ t('form.cancelCorrection') }}</button>
     </div>
 
+    <p v-if="!correcting && draft.savedKey" class="banner" data-testid="from-saved-draft">{{ t('form.fromSavedDraft') }}</p>
+
     <div v-if="choices.length === 0" class="card readiness" data-testid="needs-issuer">
       <p>{{ t('form.needsIssuer') }}</p>
       <button type="button" class="btn primary" @click="emit('settings')">{{ t('ready.goSettings') }}</button>
     </div>
 
-    <fieldset class="card" :disabled="busy">
+    <fieldset class="card" :disabled="busy || !loaded">
       <legend>{{ t('form.issuer') }}</legend>
       <select v-model="draft.issuerId" :disabled="Boolean(correcting) || choices.length === 0" :aria-label="t('form.issuer')" data-testid="issuer-select">
         <option value="">{{ t('form.chooseIssuer') }}</option>
@@ -219,12 +249,12 @@ async function submit () {
       <p v-if="issuer" class="muted small" data-testid="next-number">{{ t('form.nextNumber', { number: `${issuer.establishment}-${issuer.emissionPoint}-${String(issuer.nextSequential).padStart(9, '0')}` }) }}</p>
     </fieldset>
 
-    <fieldset class="card" :disabled="busy">
+    <fieldset class="card" :disabled="busy || !loaded">
       <legend>{{ t('form.buyer') }}</legend>
-      <BuyerPicker v-model="draft.buyerKey" :problem="buyerProblem" :disabled="busy" />
+      <BuyerPicker v-model="draft.buyerKey" :problem="buyerProblem" :disabled="busy || !loaded" />
     </fieldset>
 
-    <fieldset class="card" :disabled="busy">
+    <fieldset class="card" :disabled="busy || !loaded">
       <legend>{{ t('form.lines') }}</legend>
       <div v-for="(line, i) in draft.lines" :key="i" class="line" :data-line="i" data-testid="line">
         <div class="line-head">
@@ -271,7 +301,7 @@ async function submit () {
       <button type="button" class="btn ghost" data-testid="add-line" @click="addLine">+ {{ t('form.addLine') }}</button>
     </fieldset>
 
-    <fieldset class="card" :disabled="busy">
+    <fieldset class="card" :disabled="busy || !loaded">
       <legend>{{ t('form.payment') }}</legend>
       <select v-model="draft.payments[0].method" :aria-label="t('form.payment')" data-testid="payment-method">
         <option v-for="p in PAYMENT_METHODS" :key="p.code" :value="p.code">{{ t(`payments.${p.key}`) }}</option>
@@ -296,8 +326,9 @@ async function submit () {
     <p v-if="progress" class="banner" role="status" data-testid="progress">{{ progress }}</p>
 
     <div class="actions sticky">
-      <button v-if="!correcting" type="button" class="btn ghost" :disabled="busy" data-testid="clear-draft" @click="reset">{{ t('form.clear') }}</button>
-      <button type="submit" class="btn primary" :disabled="busy || !ready" :title="!ready ? t('form.chooseIssuer') : ''" data-testid="emit">
+      <button v-if="!correcting" type="button" class="btn ghost" :disabled="busy || !loaded" data-testid="clear-draft" @click="reset">{{ t('form.clear') }}</button>
+      <button v-if="!correcting" type="button" class="btn" :disabled="busy || !loaded || blank" :title="blank ? t('form.saveDraftBlank') : ''" data-testid="save-draft" @click="saveForLater">{{ t('form.saveDraft') }}</button>
+      <button type="submit" class="btn primary" :disabled="busy || !loaded || !ready" :title="!ready ? t('form.chooseIssuer') : ''" data-testid="emit">
         {{ correcting ? t('form.resend') : t('form.emit') }}
       </button>
     </div>
