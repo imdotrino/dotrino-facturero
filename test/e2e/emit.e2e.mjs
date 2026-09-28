@@ -324,6 +324,17 @@ test('issuers with their own signature, choosing the issuer when invoicing, SRI 
   assert.equal(await page.getByTestId('issuer-item').count(), 1)
   assert.match(await card('Tienda Dos').getByTestId('signature-state').innerText(), /Desbloqueada/)
 
+  // --- una factura enviada no se cambia: «Copiar como nueva» trae sus datos al formulario,
+  // con el mismo emisor y comprador y sin número propio
+  await page.getByTestId('tab-invoices').click()
+  await page.locator(`[data-access-key="${accessKey}"]`).click()
+  await page.getByTestId('copy-as-new').click()
+  await page.getByTestId('invoice-form').waitFor()
+  await page.waitForFunction(() => document.querySelector('[data-testid=line-description]')?.value === 'Consultoría & soporte <remoto>', null, { timeout: 10_000 })
+  assert.match(await page.getByTestId('buyer-selected').innerText(), /María Visitante/)
+  assert.equal(await page.getByTestId('issuer-select').inputValue(), dos)
+  assert.equal(await page.getByTestId('grand-total').innerText(), '$ 308.04')
+
   // Los únicos errores de consola aceptables son los que la app registra a propósito al
   // probar la contraseña mala y la imagen que no es imagen.
   const unexpected = problems.filter((p) => !/bad-password|does not open this signature file|\[facturero\] logo: Error: the image could not be read/.test(p))

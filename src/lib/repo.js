@@ -248,13 +248,18 @@ export async function removeSavedDraft (key) {
 }
 
 /**
- * Pasa un borrador guardado al formulario. Si en el formulario había otro con algo escrito,
- * no se pierde: se guarda antes (en su sitio si venía de uno guardado).
+ * Pone un borrador en el formulario. Si en el formulario había otro con algo escrito, no se
+ * pierde: se guarda antes en Borradores (en su sitio si venía de uno guardado).
+ * `savedKey` dice de qué borrador guardado viene; sin él, es uno nuevo.
  */
-export async function resumeSavedDraft (saved) {
+export async function openInForm (draft, savedKey) {
   const current = await loadDraft()
-  if (!isBlankDraft(current) && current.savedKey !== saved.key) await saveSavedDraft(current, current.savedKey)
-  await saveDraft({ ...saved.draft, savedKey: saved.key })
+  if (!isBlankDraft(current) && (!savedKey || current.savedKey !== savedKey)) await saveSavedDraft(current, current.savedKey)
+  await saveDraft(savedKey ? { ...draft, savedKey } : draft)
+}
+
+export function resumeSavedDraft (saved) {
+  return openInForm(saved.draft, saved.key)
 }
 
 // ---------- facturas ----------

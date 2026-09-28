@@ -1,8 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { t, errorText } from '../i18n.js'
-import { toast } from '../state.js'
-import { getInvoice } from '../lib/repo.js'
+import { state, toast, refreshDrafts } from '../state.js'
+import { getInvoice, openInForm } from '../lib/repo.js'
+import { draftFromInvoice } from '../lib/drafts.js'
 import { submitInvoice, checkAuthorization } from '../lib/emit.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
 import { money, sriDateTime } from '../lib/format.js'
@@ -11,7 +12,7 @@ import { issuerName } from '../lib/issuers.js'
 import RidePrint from './RidePrint.vue'
 
 const props = defineProps({ invoiceRef: { type: Object, required: true } })
-const emit = defineEmits(['close', 'correct'])
+const emit = defineEmits(['close', 'correct', 'copied'])
 
 const invoice = ref(null)
 const loading = ref(true)
@@ -85,6 +86,21 @@ async function share () {
   }
 }
 
+// Una factura enviada no se cambia; para otra igual se copian sus datos a Nueva factura.
+async function copyAsNew () {
+  busy.value = true
+  try {
+    await openInForm(draftFromInvoice(invoice.value, state.buyers))
+    await refreshDrafts()
+    emit('copied')
+  } catch (e) {
+    console.error('[facturero] copy as new:', e)
+    toast(errorText(e), 'error')
+  } finally {
+    busy.value = false
+  }
+}
+
 function print () {
   printing.value = true
 }
@@ -138,6 +154,7 @@ onMounted(async () => {
         <button class="btn" :disabled="busy || !checkable" data-testid="check-authorization" @click="check">{{ t('detail.check') }}</button>
         <button class="btn" :disabled="busy || !resendable" data-testid="resend" @click="resend">{{ t('detail.resend') }}</button>
         <button class="btn" :disabled="busy || !correctable" data-testid="correct" @click="emit('correct', invoice)">{{ t('detail.correct') }}</button>
+        <button class="btn" :disabled="busy" data-testid="copy-as-new" @click="copyAsNew">{{ t('detail.copyAsNew') }}</button>
       </div>
       <div class="actions wrap">
         <button class="btn primary" :disabled="!authorized" :title="authorized ? '' : t('detail.onlyAuthorized')" data-testid="download-xml" @click="download">{{ t('detail.download') }}</button>

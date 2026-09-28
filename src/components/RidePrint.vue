@@ -37,16 +37,24 @@ const subtotalRows = computed(() => {
   return VAT_RATES.filter((v) => byCode[v.code]).map((v) => ({ label: VAT_ES[v.code], base: byCode[v.code].base, value: byCode[v.code].value, rate: v.rate }))
 })
 
+// El diálogo de imprimir propone el título de la página como nombre del PDF: FA-001-001-000000101.
+const pageTitle = document.title
+
 function afterPrint () {
+  document.title = pageTitle
   emit('done')
 }
 
 onMounted(async () => {
+  document.title = `FA-${inv.value.number}`
   window.addEventListener('afterprint', afterPrint)
   await nextTick()
   window.print()
 })
-onBeforeUnmount(() => window.removeEventListener('afterprint', afterPrint))
+onBeforeUnmount(() => {
+  window.removeEventListener('afterprint', afterPrint)
+  document.title = pageTitle
+})
 </script>
 
 <template>

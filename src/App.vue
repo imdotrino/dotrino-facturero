@@ -109,6 +109,7 @@ onMounted(() => {
         :invoice-ref="openInvoice"
         @close="detailOpen = false"
         @correct="startCorrection"
+        @copied="correcting = null; setTab('new')"
       />
       <InvoiceList v-else-if="tab === 'invoices'" @open="showInvoice" @new="setTab('new')" @settings="setTab('settings')" />
       <InvoiceForm

@@ -132,6 +132,11 @@ falla con `sri-unreachable` y se ve en pantalla. No hay relevo de respaldo.
   `savedKey`: guardarlo otra vez lo actualiza y emitirlo lo quita. «Continuar» guarda antes lo
   que hubiera a medias en el formulario (`resumeSavedDraft`). `loadDraft` espera a la última
   escritura del borrador, porque el formulario guarda al desmontarse sin esperar.
+- **Copiar como nueva** (detalle de una factura): `draftFromInvoice` arma un borrador con su
+  emisor, comprador, líneas y pago, y `openInForm` lo pone en el formulario. Una factura
+  enviada no se edita.
+- **Nombre del PDF:** el RIDE pone `document.title = FA-<número>` mientras imprime; el diálogo
+  del navegador lo propone como nombre (`FA-001-001-000000101.pdf`).
 - Separado **por perfil**, con `@dotrino/store` ≥ 0.10.0. Hasta 0.9.0 la moneda de support
   abría el store sin identidad y, si ganaba la carrera, todo caía fuera del perfil.
   `services/store.js` igual comprueba `store.profileId` antes de devolver el store.
