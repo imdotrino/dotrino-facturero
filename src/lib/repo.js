@@ -115,8 +115,8 @@ export async function getSignatureRecord (issuerId) {
   return e
 }
 
-export function saveSignatureRecord (issuerId, { envelope, sealedBy, info, fileName }) {
-  return writeSetting(SIGNATURE_PREFIX + issuerId, { envelope, sealedBy, info, fileName })
+export function saveSignatureRecord (issuerId, { envelope, seal, sealedBy, info, fileName }) {
+  return writeSetting(SIGNATURE_PREFIX + issuerId, seal === 'profile' ? { envelope, seal, info, fileName } : { envelope, seal, sealedBy, info, fileName })
 }
 
 // ---------- el logo de cada emisor ----------
