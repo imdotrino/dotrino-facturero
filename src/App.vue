@@ -6,6 +6,7 @@ import { lang, setLang, t, errorText } from './i18n.js'
 import { state, boot } from './state.js'
 import { getIdentity } from './services/identity.js'
 import { getReputation } from './services/reputation.js'
+import { getStore } from './services/store.js'
 import InvoiceList from './components/InvoiceList.vue'
 import InvoiceForm from './components/InvoiceForm.vue'
 import InvoiceDetail from './components/InvoiceDetail.vue'
@@ -68,8 +69,16 @@ onMounted(() => {
   // Identidad del topbar (§6.1), después del primer pintado.
   getIdentity().then(async (id) => {
     topbar.value.identity = id
+    // Si la cuenta de este navegador se borra, lo que hay en pantalla ya no existe: se
+    // recarga. Sin esto, el 2026-09-28 la pestaña siguió enseñando dos días unas facturas
+    // que el almacén ya no tenía, y la pérdida se vio recién al refrescar.
+    id.onVault?.((e) => { if (e?.phase === 'account-removed') location.reload() })
     topbar.value.reputation = await getReputation()
   }).catch((e) => console.error('[facturero] topbar identity:', e))
+  // El estado del respaldo, a la vista en el botón de perfil: si esto no se respalda, se
+  // tiene que ver sin entrar a Ajustes.
+  getStore().then((store) => { topbar.value.store = store })
+    .catch((e) => console.error('[facturero] topbar store:', e))
 })
 </script>
 
