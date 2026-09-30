@@ -138,9 +138,14 @@ export async function unlockSignature (issuerId, password) {
   return info
 }
 
+/** Se llama al quitar un emisor: su firma deja de estar en memoria. */
+export function forgetSigner (issuerId) {
+  signers.delete(issuerId)
+  changed()
+}
+
 function codeError (code, message, cause) {
-  const e = new Error(message)
+  const e = new Error(message, cause ? { cause } : undefined)
   e.code = code
-  if (cause) e.cause = cause
   return e
 }
