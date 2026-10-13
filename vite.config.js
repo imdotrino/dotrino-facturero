@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import { execSync } from 'node:child_process'
+import prerender from '@dotrino/prerender/vite'
 
 // <meta name="commit"> con el hash del commit del build (CONVENCIONES §3).
 // En desarrollo vale «dev»; un build sin commit que nombrar se para, porque publicaría
@@ -25,6 +26,8 @@ function commitMeta (command) {
 export default defineConfig(({ command }) => ({
   base: './',
   plugins: [
+    // El HTML llega con contenido para quien lo lee sin ejecutar JavaScript.
+    prerender(),
     // Los `dotrino-*` son Web Components, no componentes Vue.
     vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('dotrino-') } } }),
     // HTTPS autofirmado en desarrollo: WebCrypto y el vault del store piden contexto seguro.

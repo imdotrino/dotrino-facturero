@@ -25,6 +25,7 @@
     "@dotrino/store": "0.12.3"
   },
   "devDependencies": {
+    "@dotrino/prerender": "0.1.0",
     "@vitejs/plugin-basic-ssl": "2.3.0",
     "@vitejs/plugin-vue": "6.0.2",
     "@xmldom/xmldom": "0.9.12",
