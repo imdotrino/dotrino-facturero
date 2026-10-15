@@ -36,7 +36,7 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       selfDestroying: command === 'serve',
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'og.jpg', 'robots.txt', 'sitemap.xml', 'fonts/*.woff2'],
+      includeAssets: ['icon.svg', 'og.jpg', 'robots.txt', 'sitemap.xml'],
       manifest: {
         name: 'Facturero',
         short_name: 'Facturero',

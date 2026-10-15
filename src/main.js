@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import '@dotrino/theme/theme.css'
 import './style.css'
 // Botón «Instalar» PWA unificado (§3). La barra superior se importa en App.vue.
 import '@dotrino/install'

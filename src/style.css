@@ -1,74 +1,26 @@
-/* Tema «Cool & Cozy» del ecosistema: azul #00658c + Quicksand, claro y oscuro. */
-
-@font-face {
-  font-family: 'Quicksand';
-  src: url('/fonts/quicksand.woff2') format('woff2');
-  font-weight: 300 700;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Quicksand';
-  src: url('/fonts/quicksand-ext.woff2') format('woff2');
-  font-weight: 300 700;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Comfortaa';
-  src: url('/fonts/comfortaa.woff2') format('woff2');
-  font-weight: 700;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
+/* Colores y fuentes del ecosistema (@dotrino/theme, CONVENCIONES §5): aquí solo se
+   nombran con lo que usa esta hoja. Claro u oscuro lo decide el tema. */
 :root {
-  --surface: #f7fafc;
-  --card: #ffffff;
-  --surface-low: #f1f4f6;
-  --text: #181c1e;
-  --muted: #3f484e;
-  --outline: #70787f;
-  --outline-variant: #bfc8cf;
-  --primary: #00658c;
-  --on-primary: #ffffff;
-  --primary-container: #72c1f0;
-  --on-primary-container: #004e6e;
-  --secondary: #006b5c;
-  --secondary-container: #96f4de;
-  --tertiary-container: #c2aef0;
-  --error: #ba1a1a;
-  --error-container: #ffdad6;
-  --warn-bg: #fff3cd;
-  --warn-text: #5c4400;
-  --shadow: 0 4px 20px rgba(114, 193, 240, .08);
-  --radius: 16px;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #0f1416;
-    --card: #1c2022;
-    --surface-low: #181c1e;
-    --text: #dfe3e6;
-    --muted: #bfc8cf;
-    --outline: #899296;
-    --outline-variant: #3f484e;
-    --primary: #81cfff;
-    --on-primary: #003549;
-    --primary-container: #004c6b;
-    --on-primary-container: #c6e7ff;
-    --secondary: #7ad7c2;
-    --secondary-container: #00504a;
-    --tertiary-container: #4d3d75;
-    --error: #ffb4ab;
-    --error-container: #93000a;
-    --warn-bg: #3d3000;
-    --warn-text: #f5e1a4;
-    --shadow: 0 4px 20px rgba(0, 0, 0, .35);
-    color-scheme: dark;
-  }
+  --surface: var(--dt-bg);
+  --card: var(--dt-surface);
+  --surface-low: var(--dt-surface-2);
+  --text: var(--dt-text);
+  --muted: var(--dt-text-dim);
+  --outline: var(--dt-text-faint);
+  --outline-variant: var(--dt-line);
+  --primary: var(--dt-accent);
+  --on-primary: var(--dt-accent-ink);
+  --primary-container: var(--dt-accent-soft);
+  --on-primary-container: var(--dt-accent-soft-ink);
+  --secondary: var(--dt-mint);
+  --secondary-container: var(--dt-mint-soft);
+  --tertiary-container: var(--dt-violet-soft);
+  --error: var(--dt-error);
+  --error-container: var(--dt-error-soft);
+  --warn-bg: light-dark(#fff3cd, #3d3000);
+  --warn-text: light-dark(#5c4400, #f5e1a4);
+  --shadow: var(--dt-shadow);
+  --radius: var(--dt-radius);
 }
 
 * { box-sizing: border-box; }
@@ -77,20 +29,13 @@ html, body {
   margin: 0;
   background: var(--surface);
   color: var(--text);
-  font-family: 'Quicksand', system-ui, sans-serif;
+  font-family: var(--dt-font);
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
 }
 
-dotrino-topbar {
-  --dotrino-topbar-bg: var(--card);
-  --dotrino-topbar-border: var(--outline-variant);
-  --dotrino-topbar-text: var(--text);
-  --dotrino-topbar-muted: var(--muted);
-  --dotrino-topbar-accent: var(--primary);
-}
 
-h1, h2, h3 { font-family: 'Comfortaa', 'Quicksand', sans-serif; margin: 0 0 .5rem; }
+h1, h2, h3 { font-family: var(--dt-font-brand); margin: 0 0 .5rem; }
 h2 { font-size: 1.15rem; }
 h3 { font-size: 1rem; }
 p { margin: .25rem 0; }
@@ -146,7 +91,7 @@ p { margin: .25rem 0; }
   margin: 0;
   min-width: 0;
 }
-fieldset.card legend { font-family: 'Comfortaa', sans-serif; font-weight: 700; padding: 0 .25rem; float: left; width: 100%; margin-bottom: .5rem; }
+fieldset.card legend { font-family: var(--dt-font-brand); font-weight: 700; padding: 0 .25rem; float: left; width: 100%; margin-bottom: .5rem; }
 /* El título flota para quedar dentro de la tarjeta: lo que viene detrás tiene que ir debajo
    y no a su lado (un contenedor flex junto a un float se queda sin ancho). */
 fieldset.card > :not(legend) { clear: both; }
@@ -205,7 +150,7 @@ input:disabled, select:disabled { opacity: .6; }
   border: 1px solid var(--outline);
   background: transparent;
   color: var(--outline);
-  font: 700 .75rem/1 'Quicksand', sans-serif;
+  font: 700 .75rem/1 var(--dt-font);
   padding: 0;
   cursor: pointer;
 }
@@ -357,7 +302,7 @@ textarea { font: inherit; color: var(--text); background: var(--surface-low); bo
   z-index: 60;
   box-shadow: var(--shadow);
 }
-.toast.error { background: var(--error); color: #fff; }
+.toast.error { background: var(--error-container); color: var(--dt-error-ink); }
 
 /* ---------- RIDE impreso ---------- */
 

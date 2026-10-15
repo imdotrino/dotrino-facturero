@@ -89,7 +89,7 @@ onMounted(() => {
     icon="./icon.svg"
     support-repo="imdotrino/dotrino-facturero"
     support-discord="https://discord.gg/D648uq7cth"
-    profile
+    profile theme
     @dotrino-lang="onLang"
   >
     <dotrino-install slot="end" class="cc-install sm" :lang="lang"></dotrino-install>
