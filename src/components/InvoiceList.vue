@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { t, errorText, lang } from '../i18n.js'
+import { t, errorText, formatDate } from '../i18n.js'
 import { state, usableIssuers, refreshDrafts, toast } from '../state.js'
 import { issuerName } from '../lib/issuers.js'
 import { listInvoices, resumeSavedDraft, removeSavedDraft } from '../lib/repo.js'
@@ -21,8 +21,7 @@ const issuerFilter = ref('')   // '' = todos los emisores
 
 const monthLabel = computed(() => {
   const [y, m] = month.value.split('-').map(Number)
-  const text = new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(Date.UTC(y, m - 1, 1)))
+  const text = formatDate(Date.UTC(y, m - 1, 1), { month: 'long', year: 'numeric', timeZone: 'UTC' })
   return text.charAt(0).toUpperCase() + text.slice(1)
 })
 const isCurrentMonth = computed(() => month.value >= ecuadorMonth())
@@ -64,7 +63,7 @@ function draftTotal (d) {
 }
 
 function savedAt (ms) {
-  return new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' }).format(new Date(ms))
+  return formatDate(ms, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' })
 }
 
 async function resume (saved) {

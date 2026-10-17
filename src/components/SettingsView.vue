@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { t, errorText, lang } from '../i18n.js'
+import { t, errorText, formatDate } from '../i18n.js'
 import { state, refreshSettings, toast } from '../state.js'
 import { removeIssuer } from '../lib/repo.js'
 import { issuerName, issuerProblems, nextNumber } from '../lib/issuers.js'
@@ -16,7 +16,7 @@ const copyFrom = ref(null)      // el original, si es una copia
 const toRemove = ref(null)
 const info = ref(false)
 
-const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'long' }).format(new Date(iso))
+const fmtDate = (iso) => formatDate(iso, { dateStyle: 'long' })
 const signatureOf = (issuer) => state.signatures.find((s) => s.issuerId === issuer.id) || null
 const logoOf = (issuer) => state.logos.find((l) => l.issuerId === issuer.id) || null
 const problemsOf = (issuer) => issuerProblems(issuer, { issuers: state.issuers, signatures: state.signatures })

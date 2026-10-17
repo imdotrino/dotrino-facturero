@@ -725,6 +725,11 @@ function initialLang () {
   return (navigator.language || 'es').toLowerCase().startsWith('es') ? 'es' : 'en'
 }
 
+/** Una fecha en el idioma activo (es-EC / en-US). `opts` son los de Intl.DateTimeFormat. */
+export function formatDate (value, opts) {
+  return new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', opts).format(new Date(value))
+}
+
 export function setLang (l) {
   if (l !== 'es' && l !== 'en') throw new Error(`unsupported language: ${l}`)
   lang.value = l

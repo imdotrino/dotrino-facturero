@@ -1,7 +1,7 @@
 <script setup>
 // Dónde están guardados tus datos: en tu bóveda, o solo en este navegador y por qué.
 import { ref, computed } from 'vue'
-import { t, hasText, errorText, lang } from '../i18n.js'
+import { t, hasText, errorText, lang, formatDate } from '../i18n.js'
 import { state, syncBackup, toast } from '../state.js'
 
 const busy = ref(false)
@@ -36,7 +36,7 @@ const reason = computed(() => {
 const lastSync = computed(() => {
   const at = status.value?.lastSyncAt
   if (!at) return ''
-  return new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(at))
+  return formatDate(at, { dateStyle: 'medium', timeStyle: 'short' })
 })
 
 async function syncNow () {

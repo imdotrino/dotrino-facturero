@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { t, errorText, lang } from '../i18n.js'
+import { t, errorText, formatDate } from '../i18n.js'
 import { toast } from '../state.js'
 import { EMPTY_ISSUER, saveIssuer } from '../lib/repo.js'
 import { issuerDataProblems, issuerName } from '../lib/issuers.js'
@@ -96,7 +96,7 @@ const problemAt = (field) => {
   return p ? t(`problems.${p.code}`) : ''
 }
 
-const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', { dateStyle: 'long' }).format(new Date(iso))
+const fmtDate = (iso) => formatDate(iso, { dateStyle: 'long' })
 
 async function submit () {
   showProblems.value = true
