@@ -15,6 +15,7 @@
 // «corrupción»); Excel y LibreOffice lo abren igual. Aquí se sigue la cadena del libro
 // hasta tener su tamaño declarado, que es lo que hacen ellos.
 
+import { codeError } from '../lib/errors.js'
 const OLE_MAGIC = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]
 const ENDOFCHAIN = 0xFFFFFFFE
 const FREESECT = 0xFFFFFFFF
@@ -348,8 +349,3 @@ const view = (u8) => new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
 const latin1 = (u8) => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return s }
 const decodeUtf16le = (u8) => new TextDecoder('utf-16le').decode(u8)
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

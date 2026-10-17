@@ -8,6 +8,7 @@
 // manda es una MUESTRA de lo que se quiere importar, no el archivo entero (dueño,
 // 2026-09-16).
 import { getIdentity } from './identity.js'
+import { codeError } from '../lib/errors.js'
 
 export const FEEDBACK_URL = 'https://feedback.dotrino.com/'
 export const MAX_ATTACHMENT_BYTES = 1024 * 1024
@@ -73,8 +74,3 @@ function base64url (s) {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

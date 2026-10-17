@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { t, errorText, lang } from '../i18n.js'
 import { state, refreshSettings, toast } from '../state.js'
 import { removeIssuer } from '../lib/repo.js'
-import { issuerName, issuerProblems } from '../lib/issuers.js'
+import { issuerName, issuerProblems, nextNumber } from '../lib/issuers.js'
 import { lock, forgetSigner } from '../lib/signature.js'
 import { requestUnlock } from './UnlockDialog.vue'
 import IssuerForm from './IssuerForm.vue'
@@ -20,7 +20,6 @@ const fmtDate = (iso) => new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' :
 const signatureOf = (issuer) => state.signatures.find((s) => s.issuerId === issuer.id) || null
 const logoOf = (issuer) => state.logos.find((l) => l.issuerId === issuer.id) || null
 const problemsOf = (issuer) => issuerProblems(issuer, { issuers: state.issuers, signatures: state.signatures })
-const nextNumber = (i) => `${i.establishment}-${i.emissionPoint}-${String(i.nextSequential).padStart(9, '0')}`
 const sortedIssuers = computed(() => [...state.issuers].sort((a, b) =>
   issuerName(a).localeCompare(issuerName(b)) || a.environment.localeCompare(b.environment)))
 

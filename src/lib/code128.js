@@ -5,6 +5,7 @@
 // La clave tiene 49 dígitos: los pares van en el juego C (un símbolo por cada dos
 // dígitos) y el dígito suelto en el juego B.
 
+import { codeError } from './errors.js'
 const PATTERNS = [
   '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
   '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
@@ -86,8 +87,3 @@ function digitRun (text, from) {
   return n
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

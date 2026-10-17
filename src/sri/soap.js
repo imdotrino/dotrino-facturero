@@ -10,6 +10,7 @@
 // cambian, el envío falla con `sri-unreachable` y se dice en pantalla: no hay un camino
 // alternativo escondido.
 
+import { codeError } from '../lib/errors.js'
 export const ENDPOINTS = Object.freeze({
   1: 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/',
   2: 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/',
@@ -85,7 +86,7 @@ function parseSoap (text, Parser) {
   try {
     doc = new Parser().parseFromString(text, 'text/xml')
   } catch (e) {
-    throw codeError('sri-bad-response', `the SRI answered something that is not XML: ${String(text).slice(0, 200)}`, e)
+    throw codeError('sri-bad-response', `the SRI answered something that is not XML: ${String(text).slice(0, 200)}`, { cause: e })
   }
   if (!doc?.documentElement || doc.getElementsByTagName('parsererror').length > 0) {
     throw codeError('sri-bad-response', `the SRI answered something that is not XML: ${String(text).slice(0, 200)}`)
@@ -139,7 +140,7 @@ export async function callSri (environment, service, envelope, { fetchImpl = glo
     })
   } catch (e) {
     if (e?.name === 'AbortError') throw e
-    throw codeError('sri-unreachable', `could not reach the SRI (${service}): ${e?.message || e}`, e)
+    throw codeError('sri-unreachable', `could not reach the SRI (${service}): ${e?.message || e}`, { cause: e })
   }
   const text = await res.text()
   // Un fallo SOAP llega con 500 y cuerpo XML: se deja pasar para leer su faultstring.
@@ -147,8 +148,3 @@ export async function callSri (environment, service, envelope, { fetchImpl = glo
   return text
 }
 
-function codeError (code, message, cause) {
-  const e = new Error(message, cause ? { cause } : undefined)
-  e.code = code
-  return e
-}

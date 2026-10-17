@@ -21,6 +21,7 @@
 import { getIdentity } from '../services/identity.js'
 import { listSignatureRecords, getSignatureRecord, saveSignatureRecord } from './repo.js'
 import { bytesToBase64, base64ToBytes } from './bytes.js'
+import { codeError } from './errors.js'
 
 /** issuerId → firmador desbloqueado. No se expone a Vue: un Proxy rompe la CryptoKey. */
 const signers = new Map()
@@ -108,7 +109,7 @@ export async function unlockSignature (issuerId, password) {
   try {
     plaintext = await id.openContent(r.envelope)
   } catch (e) {
-    throw codeError('seal-no-profile-key', `the saved signature cannot be opened with the account key on this device: ${e?.message || e}`, e)
+    throw codeError('seal-no-profile-key', `the saved signature cannot be opened with the account key on this device: ${e?.message || e}`, { cause: e })
   }
   const { openP12 } = await import('../sri/p12.js')
   const { signer, info } = await openP12(base64ToBytes(plaintext), password)
@@ -124,8 +125,3 @@ export function forgetSigner (issuerId) {
   changed()
 }
 
-function codeError (code, message, cause) {
-  const e = new Error(message, cause ? { cause } : undefined)
-  e.code = code
-  return e
-}

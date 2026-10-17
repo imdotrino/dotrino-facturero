@@ -20,6 +20,7 @@ import { currentSigner } from './signature.js'
 import { issuerProblems } from './issuers.js'
 import { ecuadorToday } from './dates.js'
 import { gzipText, gunzipText } from './bytes.js'
+import { codeError } from './errors.js'
 
 /** Esperas entre consultas de autorización tras una recepción, en ms. */
 export const AUTHORIZATION_WAITS = [2500, 4000, 8000]
@@ -228,9 +229,3 @@ function sleep (ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function codeError (code, message, extra) {
-  const e = new Error(message)
-  e.code = code
-  if (extra) Object.assign(e, extra)
-  return e
-}

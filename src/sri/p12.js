@@ -10,7 +10,8 @@
 // con su certificado y se elige el de firma. Si no se puede decidir, se para y se dice.
 
 import forge from 'node-forge'
-import { bytesToBase64 } from './xades.js'
+import { bytesToBase64, bytesToBinary, binaryToBytes } from '../lib/bytes.js'
+import { codeError } from '../lib/errors.js'
 
 const OID_KEY_BAG = forge.pki.oids.keyBag
 const OID_SHROUDED_KEY_BAG = forge.pki.oids.pkcs8ShroudedKeyBag
@@ -63,9 +64,9 @@ function readP12 (bytes, password) {
     p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, password)
   } catch (e) {
     const msg = String(e?.message || e)
-    if (/MAC could not be verified|Invalid password/i.test(msg)) throw codeError('bad-password', 'the password does not open this signature file', e)
-    if (/unsupported|not supported/i.test(msg)) throw codeError('unsupported-p12', `this signature file uses an algorithm that cannot be opened here: ${msg}`, e)
-    throw codeError('bad-p12', `not a valid .p12 file: ${msg}`, e)
+    if (/MAC could not be verified|Invalid password/i.test(msg)) throw codeError('bad-password', 'the password does not open this signature file', { cause: e })
+    if (/unsupported|not supported/i.test(msg)) throw codeError('unsupported-p12', `this signature file uses an algorithm that cannot be opened here: ${msg}`, { cause: e })
+    throw codeError('bad-p12', `not a valid .p12 file: ${msg}`, { cause: e })
   } finally {
     forge.pki.pbe.getCipherForPBES2 = pbes2
   }
@@ -192,20 +193,3 @@ function bigIntegerToBase64 (n) {
   return bytesToBase64(binaryToBytes(forge.util.hexToBytes(hex)))
 }
 
-function bytesToBinary (bytes) {
-  let bin = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return bin
-}
-
-function binaryToBytes (bin) {
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
-}
-
-function codeError (code, message, cause) {
-  const e = new Error(message, cause ? { cause } : undefined)
-  e.code = code
-  return e
-}

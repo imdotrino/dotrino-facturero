@@ -7,6 +7,7 @@
 // El dígito verificador es módulo 11 con pesos 2..7 de derecha a izquierda
 // (ficha técnica de comprobantes electrónicos, esquema offline).
 
+import { codeError } from '../lib/errors.js'
 export const DOC_TYPES = Object.freeze({
   invoice: '01',
   creditNote: '04',
@@ -97,8 +98,3 @@ function randomDigits (n) {
   return Array.from(bytes, (b) => String(b % 10)).join('')
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

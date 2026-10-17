@@ -5,16 +5,13 @@
 // mejor que una de 600 px. Se dibuja sobre blanco —el papel es blanco— y se guarda en el
 // formato que menos pese de los que el navegador sepa escribir.
 
+import { codeError } from './errors.js'
 export const LOGO_TYPES = Object.freeze(['image/png', 'image/jpeg', 'image/webp'])
 export const LOGO_MAX_FILE_BYTES = 5 * 1024 * 1024
 /** Lo que puede ocupar el logo ya reducido (su data URL). */
 export const LOGO_MAX_BYTES = 150 * 1024
 const MAX_WIDTH = 600
 const MAX_HEIGHT = 300
-
-function codeError (code, message) {
-  return Object.assign(new Error(message), { code })
-}
 
 /** Lee la imagen, la reduce y devuelve `{ dataUrl, width, height }`. Lanza con `code`. */
 export async function prepareLogo (file) {

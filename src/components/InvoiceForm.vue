@@ -7,7 +7,7 @@ import { VAT_RATES, DEFAULT_VAT_CODE, PAYMENT_METHODS } from '../sri/catalog.js'
 import { FINAL_CONSUMER_KEY, resolveBuyer, buyerSnapshot } from '../lib/buyers.js'
 import { emitInvoice, correctInvoice } from '../lib/emit.js'
 import { currentSigner } from '../lib/signature.js'
-import { issuerName } from '../lib/issuers.js'
+import { issuerName, nextNumber } from '../lib/issuers.js'
 import { loadDraft, saveDraft, clearDraft, saveSavedDraft, removeSavedDraft } from '../lib/repo.js'
 import { isBlankDraft, toSaved } from '../lib/drafts.js'
 import { money } from '../lib/format.js'
@@ -246,7 +246,7 @@ async function submit () {
       </select>
       <small v-if="problemAt('issuerId')" class="problem">{{ problemAt('issuerId') }}</small>
       <p v-if="issuer?.environment === '1'" class="banner warn" data-testid="test-env">{{ t('testEnvironment') }}</p>
-      <p v-if="issuer" class="muted small" data-testid="next-number">{{ t('form.nextNumber', { number: `${issuer.establishment}-${issuer.emissionPoint}-${String(issuer.nextSequential).padStart(9, '0')}` }) }}</p>
+      <p v-if="issuer" class="muted small" data-testid="next-number">{{ t('form.nextNumber', { number: nextNumber(issuer) }) }}</p>
     </fieldset>
 
     <fieldset class="card" :disabled="busy || !loaded">

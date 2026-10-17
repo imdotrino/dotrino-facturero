@@ -7,6 +7,11 @@ export function issuerName (issuer) {
   return cleanText(issuer.tradeName) || cleanText(issuer.legalName) || issuer.ruc || '—'
 }
 
+/** El número que llevará su próxima factura: `001-001-000000123`. */
+export function nextNumber (issuer) {
+  return `${issuer.establishment}-${issuer.emissionPoint}-${String(issuer.nextSequential).padStart(9, '0')}`
+}
+
 /**
  * Dos emisores con el mismo RUC, serie y ambiente comparten numeración: cada uno llevaría
  * su propio contador y el SRI rechazaría la segunda factura con el mismo número (45).

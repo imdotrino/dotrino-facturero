@@ -5,6 +5,7 @@
 // el SRI en cantidad y precio unitario). El redondeo es «mitad hacia arriba», el
 // habitual en facturación; todos los importes son no negativos.
 
+import { codeError } from '../lib/errors.js'
 const SCALE = 1_000_000n
 
 export function parseDecimal (value, { field = 'value' } = {}) {
@@ -52,8 +53,3 @@ function numberToString (n) {
   return n.toFixed(6).replace(/\.?0+$/, '')
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

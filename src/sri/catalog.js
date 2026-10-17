@@ -1,6 +1,7 @@
 // Tablas de la ficha técnica de comprobantes electrónicos (esquema offline, v2.34).
 // Los textos que ve el usuario viven en i18n; aquí solo los códigos.
 
+import { codeError } from '../lib/errors.js'
 /** Tabla 17: tarifas de IVA (`codigoPorcentaje`). `rate` en porcentaje. */
 export const VAT_RATES = Object.freeze([
   { code: '4', rate: '15', key: 'vat15' },
@@ -58,8 +59,3 @@ export function vatRate (code) {
   return r
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

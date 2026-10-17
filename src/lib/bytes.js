@@ -1,17 +1,20 @@
 // Conversión de bytes, base64 y gzip con lo que trae el navegador (sin librerías).
 
-export function bytesToBase64 (bytes) {
+/** Bytes → cadena binaria (un carácter por byte), por tramos para no reventar la pila. */
+export function bytesToBinary (bytes) {
   let bin = ''
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return btoa(bin)
+  return bin
 }
 
-export function base64ToBytes (b64) {
-  const bin = atob(b64)
+export function binaryToBytes (bin) {
   const out = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
   return out
 }
+
+export const bytesToBase64 = (bytes) => btoa(bytesToBinary(bytes))
+export const base64ToBytes = (b64) => binaryToBytes(atob(b64))
 
 /** Texto → gzip → base64. Un XML firmado baja a la cuarta parte. */
 export async function gzipText (text) {

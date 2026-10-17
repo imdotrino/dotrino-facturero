@@ -28,6 +28,7 @@
 
 import { getStore } from '../services/store.js'
 import { isBlankDraft, toSaved } from './drafts.js'
+import { codeError } from './errors.js'
 
 const SETTINGS = 'facturero.settings'
 const INVOICES_PREFIX = 'facturero.invoices.'
@@ -286,8 +287,3 @@ export async function getInvoice (day, accessKey) {
   return entries.find((e) => e.id === accessKey) || null
 }
 
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}

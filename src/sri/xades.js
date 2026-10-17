@@ -9,6 +9,8 @@
 // eso el SRI contesta «FIRMA INVALIDA» (39) en la autorización, no en la recepción.
 
 import { escapeText, escapeAttr } from './xml.js'
+import { codeError } from '../lib/errors.js'
+import { bytesToBase64 } from '../lib/bytes.js'
 
 export const NS_DS = 'http://www.w3.org/2000/09/xmldsig#'
 export const NS_XADES = 'http://uri.etsi.org/01903/v1.3.2#'
@@ -154,14 +156,3 @@ async function rsaSha1Base64 (key, text) {
   return bytesToBase64(new Uint8Array(sig))
 }
 
-export function bytesToBase64 (bytes) {
-  let bin = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return btoa(bin)
-}
-
-function codeError (code, message) {
-  const e = new Error(message)
-  e.code = code
-  return e
-}
