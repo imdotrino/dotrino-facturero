@@ -9,6 +9,7 @@
 // 2026-09-16).
 import { getIdentity } from './identity.js'
 import { codeError } from '../lib/errors.js'
+import { bytesToBase64 } from '../lib/bytes.js'
 
 export const FEEDBACK_URL = 'https://feedback.dotrino.com/'
 export const MAX_ATTACHMENT_BYTES = 1024 * 1024
@@ -68,9 +69,6 @@ export async function requestImporter ({ text, contact, locale, file = null, fet
 }
 
 function base64url (s) {
-  const bytes = new TextEncoder().encode(s)
-  let bin = ''
-  for (const b of bytes) bin += String.fromCharCode(b)
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return bytesToBase64(new TextEncoder().encode(s)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 

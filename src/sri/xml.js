@@ -8,6 +8,7 @@
 
 import { computeInvoice, cleanText } from './invoice.js'
 import { RIMPE_LEGENDS, TAX_VAT, FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from './catalog.js'
+import { bytesToBase64 } from '../lib/bytes.js'
 
 export const INVOICE_VERSION = '1.1.0'
 export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -124,8 +125,5 @@ function additionalFields (buyer) {
 }
 
 export function toBase64Utf8 (text) {
-  const bytes = new TextEncoder().encode(text)
-  let bin = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return btoa(bin)
+  return bytesToBase64(new TextEncoder().encode(text))
 }
