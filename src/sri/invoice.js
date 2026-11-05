@@ -6,10 +6,21 @@
 
 import { parseDecimal, mul, round, percent, format, sum } from './decimal.js'
 import { vatRate, BUYER_ID_TYPES, PAYMENT_METHODS, FINAL_CONSUMER_ID, FINAL_CONSUMER_MAX, RIMPE_LEGENDS } from './catalog.js'
+import { codeError, codeOf } from '../lib/errors.js'
+
+/** @typedef {import('../types').Problem} Problem */
+/** @typedef {import('../types').AddProblem} AddProblem */
+/** @typedef {import('../types').IssuerData} IssuerData */
+/** @typedef {import('../types').Totals} Totals */
+/**
+ * Lo que necesita el cálculo: las líneas, la propina y (para validar) el comprador.
+ * @typedef {Pick<import('../types').Draft, 'lines' | 'tip'> & Partial<import('../types').DraftWithBuyer>} CalcDraft
+ */
 
 const LIMITS = { name: 300, address: 300, description: 300, code: 25, extra: 300, id: 20, email: 300 }
 
 /** Colapsa espacios y saltos de línea: el XSD no admite saltos en ningún campo de texto. */
+/** @param {unknown} value */
 export function cleanText (value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim()
 }
@@ -20,14 +31,16 @@ const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
  * Los correos de un campo: uno o varios, separados por coma, punto y coma o espacios (así los
  * guarda Facturero Móvil). En la factura van juntos en un solo campo adicional.
  */
+/** @param {unknown} text */
 export function splitEmails (text) {
   const parts = cleanText(text).split(/[,;\s]+/).filter(Boolean)
   return { valid: parts.filter((p) => EMAIL_RE.test(p)), invalid: parts.filter((p) => !EMAIL_RE.test(p)) }
 }
 
-export const joinEmails = (list) => list.join(', ')
+export const joinEmails = (/** @type {string[]} */ list) => list.join(', ')
 
 /** `''` si el campo de correo está bien (vacío también vale), o el código del problema. */
+/** @param {unknown} text */
 export function emailProblem (text) {
   const value = cleanText(text)
   if (!value) return ''
@@ -38,6 +51,8 @@ export function emailProblem (text) {
 /**
  * Calcula líneas y totales. Lanza con `code` si un número no es válido; `validate`
  * convierte eso en problemas por campo para la interfaz.
+ * @param {CalcDraft} draft
+ * @returns {Totals}
  */
 export function computeInvoice (draft) {
   const lines = (draft.lines || []).map((line, i) => {
@@ -46,9 +61,7 @@ export function computeInvoice (draft) {
     const discount = round(parseDecimal(line.discount || '0', { field: `lines[${i}].discount` }), 2)
     const gross = round(mul(quantity, unitPrice), 2)
     if (discount > gross) {
-      const e = new Error(`lines[${i}]: discount is larger than the line amount`)
-      e.code = 'discount-exceeds'
-      throw e
+      throw codeError('discount-exceeds', `lines[${i}]: discount is larger than the line amount`)
     }
     const base = gross - discount
     const rate = vatRate(line.vatCode)
@@ -67,6 +80,7 @@ export function computeInvoice (draft) {
     }
   })
 
+  /** @type {Map<string, { code: string, rate: string, base: bigint, value: bigint }>} */
   const byCode = new Map()
   for (const l of lines) {
     const t = byCode.get(l.vat.code) || { code: l.vat.code, rate: l.vat.rate, base: 0n, value: 0n }
@@ -98,10 +112,15 @@ export function computeInvoice (draft) {
 /**
  * Lo que impide emitir. Devuelve `[{ path, code }]`; lista vacía = se puede firmar.
  * No corrige nada por su cuenta: dice qué falta.
+ * @param {CalcDraft} draft
+ * @param {IssuerData | null | undefined} issuer
+ * @returns {Problem[]}
  */
 export function validate (draft, issuer) {
+  /** @type {Problem[]} */
   const problems = []
-  const add = (path, code) => problems.push({ path, code })
+  /** @type {AddProblem} */
+  const add = (path, code) => { problems.push({ path, code }) }
 
   validateIssuer(issuer, add)
 
@@ -146,7 +165,7 @@ export function validate (draft, issuer) {
     try {
       totals = computeInvoice(draft)
     } catch (e) {
-      if (e.code !== 'discount-exceeds') throw e
+      if (codeOf(e) !== 'discount-exceeds') throw e
       add('lines', 'discount-exceeds')
       return problems
     }
@@ -156,6 +175,10 @@ export function validate (draft, issuer) {
   return problems
 }
 
+/**
+ * @param {IssuerData | null | undefined} issuer
+ * @param {AddProblem} add
+ */
 export function validateIssuer (issuer, add) {
   if (!issuer) { add('issuer', 'required'); return }
   if (!/^\d{10}001$/.test(issuer.ruc || '')) add('issuer.ruc', 'bad-ruc')
@@ -172,6 +195,7 @@ export function validateIssuer (issuer, add) {
 }
 
 /** Cédula ecuatoriana: provincia 01–24 o 30, tercer dígito < 6 y módulo 10. */
+/** @param {string} id */
 export function isCedula (id) {
   if (!/^\d{10}$/.test(id)) return false
   const province = Number(id.slice(0, 2))
@@ -191,18 +215,25 @@ export function isCedula (id) {
  * el de sociedades y entidades públicas no, porque los RUC nuevos ya no cumplen el
  * módulo 11 de antes y rechazaríamos uno válido.
  */
+/** @param {string} id */
 export function isRuc (id) {
   if (!/^\d{10}001$/.test(id)) return false
   if (Number(id[2]) < 6) return isCedula(id.slice(0, 10))
   return true
 }
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @param {AddProblem} add
+ * @param {{ positive?: boolean }} [opts]
+ */
 function checkDecimal (value, path, add, { positive = false } = {}) {
   let v
   try {
     v = parseDecimal(value, { field: path })
   } catch (e) {
-    if (e.code !== 'bad-decimal') throw e
+    if (codeOf(e) !== 'bad-decimal') throw e
     add(path, 'bad-number')
     return
   }

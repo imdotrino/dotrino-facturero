@@ -11,6 +11,7 @@ const CRC_TABLE = (() => {
   return t
 })()
 
+/** @param {Uint8Array} bytes */
 export function crc32 (bytes) {
   let c = 0xFFFFFFFF
   for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)
@@ -19,7 +20,7 @@ export function crc32 (bytes) {
 
 /**
  * @param {Array<{ name: string, data: string|Uint8Array, date?: Date }>} files
- * @returns {Uint8Array}
+ * @returns {Uint8Array<ArrayBuffer>}
  */
 export function zipStore (files) {
   const enc = new TextEncoder()
@@ -82,6 +83,7 @@ export function zipStore (files) {
   return out
 }
 
+/** @param {Date} d */
 function dosDateTime (d) {
   return {
     time: (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2),

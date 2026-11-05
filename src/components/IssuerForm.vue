@@ -9,12 +9,15 @@ import { saveLogo, removeLogo } from '../lib/repo.js'
 import { prepareLogo, LOGO_TYPES, LOGO_MAX_FILE_BYTES } from '../lib/logo.js'
 import { cleanText } from '../sri/invoice.js'
 
+/** @import { PropType } from 'vue' */
+/** @typedef {import('../types').Issuer} Issuer */
+
 const props = defineProps({
-  issuer: { type: Object, default: null },        // null = nuevo
-  copyFrom: { type: Object, default: null },      // emisor original al duplicar
-  issuers: { type: Array, required: true },
-  signatures: { type: Array, required: true },
-  logos: { type: Array, required: true },
+  issuer: { type: /** @type {PropType<(import('../types').IssuerData & { id?: string }) | null>} */ (Object), default: null },        // null = nuevo; sin id, una copia
+  copyFrom: { type: /** @type {PropType<Issuer | null>} */ (Object), default: null },      // emisor original al duplicar
+  issuers: { type: /** @type {PropType<Issuer[]>} */ (Array), required: true },
+  signatures: { type: /** @type {PropType<import('../types').StoredSignature[]>} */ (Array), required: true },
+  logos: { type: /** @type {PropType<import('../types').IssuerLogo[]>} */ (Array), required: true },
 })
 const emit = defineEmits(['saved', 'cancel'])
 
@@ -26,27 +29,28 @@ const info = ref(false)
 // La firma: la que ya tiene el emisor, o la del original si es una copia. Si no hay
 // ninguna, o se pide reemplazarla, se carga un archivo.
 const current = computed(() => props.signatures.find((s) => s.issuerId === props.issuer?.id) || null)
-const source = computed(() => props.copyFrom ? props.signatures.find((s) => s.issuerId === props.copyFrom.id) || null : null)
+const source = computed(() => { const from = props.copyFrom; return from ? props.signatures.find((s) => s.issuerId === from.id) || null : null })
 const kept = computed(() => current.value || source.value)
 const replacing = ref(false)
 const needsFile = computed(() => !kept.value || replacing.value)
-const file = ref(null)
+const file = ref(/** @type {File | null} */ (null))
 const password = ref('')
 const signatureError = ref('')
 
 // El logo: el que ya tiene, el del original si es una copia, o uno nuevo ya reducido. Se
 // reduce al elegirlo, para ver cómo queda y avisar antes de guardar si no sirve.
 const currentLogo = computed(() => props.logos.find((l) => l.issuerId === props.issuer?.id) || null)
-const sourceLogo = computed(() => props.copyFrom ? props.logos.find((l) => l.issuerId === props.copyFrom.id) || null : null)
-const newLogo = ref(null)
+const sourceLogo = computed(() => { const from = props.copyFrom; return from ? props.logos.find((l) => l.issuerId === from.id) || null : null })
+const newLogo = ref(/** @type {import('../types').Logo | null} */ (null))
 const dropLogo = ref(false)
 const logoError = ref('')
-const logoInput = ref(null)
+const logoInput = ref(/** @type {HTMLInputElement | null} */ (null))
 const shownLogo = computed(() => newLogo.value || (dropLogo.value ? null : currentLogo.value || sourceLogo.value))
 const logoMaxMb = LOGO_MAX_FILE_BYTES / (1024 * 1024)
 
+/** @param {Event} e */
 async function onLogo (e) {
-  const picked = e.target.files?.[0]
+  const picked = /** @type {HTMLInputElement} */ (e.target).files?.[0]
   logoError.value = ''
   if (!picked) return
   try {
@@ -65,8 +69,9 @@ function clearLogo () {
   if (logoInput.value) logoInput.value.value = ''
 }
 
+/** @param {Event} e */
 function onFile (e) {
-  file.value = e.target.files?.[0] || null
+  file.value = /** @type {HTMLInputElement} */ (e.target).files?.[0] || null
   signatureError.value = ''
 }
 
@@ -90,13 +95,13 @@ const problems = computed(() => [
   ...issuerDataProblems(normalized(), props.issuers),
   ...(needsFile.value && !(file.value && password.value) ? [{ path: 'issuer.signature', code: 'required' }] : []),
 ])
-const problemAt = (field) => {
+const problemAt = (/** @type {string} */ field) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === `issuer.${field}`)
   return p ? t(`problems.${p.code}`) : ''
 }
 
-const fmtDate = (iso) => formatDate(iso, { dateStyle: 'long' })
+const fmtDate = (/** @type {string} */ iso) => formatDate(iso, { dateStyle: 'long' })
 
 async function submit () {
   showProblems.value = true
@@ -111,6 +116,7 @@ async function submit () {
     let opened = null
     if (needsFile.value) {
       try {
+        if (!file.value) throw new Error('facturero: no signature file chosen')
         opened = await openSignatureFile(file.value, password.value)
       } catch (e) {
         console.error('[facturero] open signature:', e)
@@ -120,7 +126,7 @@ async function submit () {
     }
     const saved = await saveIssuer(normalized())
     if (opened) await attachSignature(saved.id, opened)
-    else if (!current.value && source.value) await copySignature(props.copyFrom.id, saved.id)
+    else if (!current.value && source.value) await copySignature(source.value.issuerId, saved.id)
     if (newLogo.value) await saveLogo(saved.id, newLogo.value)
     else if (dropLogo.value) { if (currentLogo.value) await removeLogo(saved.id) }
     else if (!currentLogo.value && sourceLogo.value) await saveLogo(saved.id, sourceLogo.value)
@@ -231,7 +237,7 @@ async function submit () {
           <p data-testid="issuer-signature-kept">
             <strong>{{ kept.info.holder }}</strong> · {{ t('settings.validTo') }} {{ fmtDate(kept.info.validTo) }}
           </p>
-          <p v-if="!current && source" class="muted small">{{ t('settings.signatureCopied', { name: issuerName(copyFrom) }) }}</p>
+          <p v-if="!current && source && copyFrom" class="muted small">{{ t('settings.signatureCopied', { name: issuerName(copyFrom) }) }}</p>
           <div class="actions wrap">
             <button type="button" class="btn small" data-testid="replace-signature" @click="replacing = true">{{ t('settings.replaceSignature') }}</button>
           </div>

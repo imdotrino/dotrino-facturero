@@ -16,15 +16,24 @@ import ProductsView from './components/ProductsView.vue'
 import ImportView from './components/ImportView.vue'
 import UnlockDialog from './components/UnlockDialog.vue'
 
+/** @typedef {import('./types').Invoice} Invoice */
+/** Qué factura está abierta. @typedef {{ day: string, accessKey: string }} InvoiceRef */
+
 const TABS = ['invoices', 'new', 'buyers', 'products', 'import', 'settings']
 // La pestaña sobrevive a un refresco; abrir la app de cero vuelve a Facturas (§4).
 const TAB_KEY = 'facturero.tab'
 
 const tab = ref(readTab())
-const openInvoice = ref(null)       // { day, accessKey }
-const correcting = ref(null)        // factura que se está corrigiendo
+const openInvoice = ref(/** @type {InvoiceRef | null} */ (null))
+const correcting = ref(/** @type {Invoice | null} */ (null))   // factura que se está corrigiendo
 const detailOpen = ref(false)
-const topbar = ref(null)
+const topbar = ref(/** @type {import('@dotrino/topbar').DotrinoTopbar | null} */ (null))
+
+/** La barra ya montada; antes de montarse no hay a quién darle nada. */
+function bar () {
+  if (!topbar.value) throw new Error('facturero: the topbar is not mounted')
+  return topbar.value
+}
 
 useBackLayer(detailOpen)
 watch(detailOpen, (open) => { if (!open) openInvoice.value = null })
@@ -32,34 +41,39 @@ watch(detailOpen, (open) => { if (!open) openInvoice.value = null })
 function readTab () {
   try {
     const v = sessionStorage.getItem(TAB_KEY)
-    return TABS.includes(v) ? v : 'invoices'
+    return v !== null && TABS.includes(v) ? v : 'invoices'
   } catch {
     return 'invoices'
   }
 }
 
+/** @param {string} name */
 function setTab (name) {
   tab.value = name
   detailOpen.value = false
   try { sessionStorage.setItem(TAB_KEY, name) } catch { /* modo privado */ }
 }
 
+/** @param {InvoiceRef} target */
 function showInvoice (target) {
   openInvoice.value = target
   detailOpen.value = true
 }
 
+/** @param {Invoice} invoice */
 function onEmitted (invoice) {
   correcting.value = null
   setTab('invoices')
   showInvoice({ day: invoice.day, accessKey: invoice.accessKey })
 }
 
+/** @param {Invoice} invoice */
 function startCorrection (invoice) {
   correcting.value = invoice
   setTab('new')
 }
 
+/** @param {CustomEvent<{ lang: string }>} e */
 function onLang (e) {
   setLang(e.detail.lang)
 }
@@ -68,16 +82,16 @@ onMounted(() => {
   boot()
   // Identidad del topbar (§6.1), después del primer pintado.
   getIdentity().then(async (id) => {
-    topbar.value.identity = id
+    bar().identity = id
     // Si la cuenta de este navegador se borra, lo que hay en pantalla ya no existe: se
     // recarga. Sin esto, el 2026-09-28 la pestaña siguió enseñando dos días unas facturas
     // que el almacén ya no tenía, y la pérdida se vio recién al refrescar.
     id.onVault?.((e) => { if (e?.phase === 'account-removed') location.reload() })
-    topbar.value.reputation = await getReputation()
+    bar().reputation = await getReputation()
   }).catch((e) => console.error('[facturero] topbar identity:', e))
   // El estado del respaldo, a la vista en el botón de perfil: si esto no se respalda, se
   // tiene que ver sin entrar a Ajustes.
-  getStore().then((store) => { topbar.value.store = store })
+  getStore().then((store) => { bar().store = store })
     .catch((e) => console.error('[facturero] topbar store:', e))
 })
 </script>

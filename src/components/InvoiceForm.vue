@@ -3,7 +3,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t, errorText } from '../i18n.js'
 import { state, usableIssuers, refreshSettings, refreshDrafts, toast } from '../state.js'
 import { computeInvoice, validate } from '../sri/invoice.js'
-import { VAT_RATES, DEFAULT_VAT_CODE, PAYMENT_METHODS } from '../sri/catalog.js'
+import { VAT_RATES, DEFAULT_VAT_CODE, PAYMENT_METHODS, vatRate } from '../sri/catalog.js'
 import { FINAL_CONSUMER_KEY, resolveBuyer, buyerSnapshot } from '../lib/buyers.js'
 import { emitInvoice, correctInvoice } from '../lib/emit.js'
 import { currentSigner } from '../lib/signature.js'
@@ -15,15 +15,22 @@ import { requestUnlock } from './UnlockDialog.vue'
 import BuyerPicker from './BuyerPicker.vue'
 import ProductPicker from './ProductPicker.vue'
 import { lineFromProduct } from '../lib/products.js'
+import { codeError, codeOf } from '../lib/errors.js'
 
-const props = defineProps({ correcting: { type: Object, default: null } })
+/** @import { PropType } from 'vue' */
+/** @typedef {import('../types').Draft} Draft */
+/** @typedef {import('../types').DraftLine} DraftLine */
+
+const props = defineProps({ correcting: { type: /** @type {PropType<import('../types').Invoice | null>} */ (Object), default: null } })
 const emit = defineEmits(['emitted', 'saved', 'cancel-correction', 'settings'])
 
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
+/** @returns {DraftLine} */
 const emptyLine = () => ({ code: '', auxCode: '', description: '', unit: '', quantity: '1', unitPrice: '', discount: '', vatCode: DEFAULT_VAT_CODE })
 // Cada factura empieza con «Consumidor final» (ficha técnica §9.10) y el emisor de la
 // anterior.
+/** @returns {Draft} */
 const emptyDraft = (issuerId = '') => ({
   issuerId,
   buyerKey: FINAL_CONSUMER_KEY,
@@ -36,7 +43,7 @@ const draft = reactive(emptyDraft())
 const showProblems = ref(false)
 const busy = ref(false)
 const progress = ref('')
-const confirm = reactive({ open: false, resolve: null })
+const confirm = reactive({ open: false, resolve: /** @type {((ok: boolean) => void) | null} */ (null) })
 // Hasta que se lee el borrador guardado, el formulario no se deja tocar: lo que se escribiera
 // antes quedaría pisado al cargarlo.
 const loaded = ref(false)
@@ -47,7 +54,10 @@ const fullDraft = computed(() => ({ ...toSaved(draft), buyer: buyer.value ? buye
 const blank = computed(() => isBlankDraft(draft))
 const choices = computed(() => usableIssuers())
 const issuer = computed(() => state.issuers.find((i) => i.id === draft.issuerId) || null)
-const ready = computed(() => Boolean(issuer.value) && choices.value.some((i) => i.id === issuer.value.id))
+const ready = computed(() => {
+  const iss = issuer.value
+  return Boolean(iss) && choices.value.some((i) => i.id === iss?.id)
+})
 
 const problems = computed(() => [
   ...(issuer.value ? [] : [{ path: 'issuerId', code: 'required' }]),
@@ -61,7 +71,7 @@ const buyerProblem = computed(() => {
   const p = problems.value.find((x) => x.path === 'buyerKey' || x.path.startsWith('buyer.'))
   return p ? t(`problems.${p.code}`) : ''
 })
-const problemAt = (path) => {
+const problemAt = (/** @type {string} */ path) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === path)
   return p ? t(`problems.${p.code}`) : ''
@@ -74,17 +84,18 @@ const totals = computed(() => {
   try {
     return computeInvoice(fullDraft.value)
   } catch (e) {
-    if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(e.code)) throw e
+    if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(codeOf(e) ?? '')) throw e
     return null
   }
 })
 
-const vatLabel = (code) => t(`vat.${VAT_RATES.find((v) => v.code === code).key}`)
-const lineSubtotal = (i) => totals.value?.lines[i]?.subtotal ?? '—'
+const vatLabel = (/** @type {string} */ code) => t(`vat.${vatRate(code).key}`)
+const lineSubtotal = (/** @type {number} */ i) => totals.value?.lines[i]?.subtotal ?? '—'
 
+/** @param {Draft} d */
 function replaceDraft (d) {
   // Sin esto, `savedKey` de un borrador anterior se quedaría pegado al siguiente.
-  for (const k of Object.keys(draft)) delete draft[k]
+  for (const k of Object.keys(draft)) delete /** @type {Record<string, unknown>} */ (draft)[k]
   Object.assign(draft, emptyDraft(), JSON.parse(JSON.stringify(d)))
 }
 
@@ -98,15 +109,16 @@ function pickIssuer () {
 
 // El borrador se guarda al dejar de escribir, y lo pendiente se guarda ya al salir del
 // formulario: cambiar de pestaña o emitir no puede perder lo último que se escribió.
+/** @type {ReturnType<typeof setTimeout> | null} */
 let saveTimer = null
 function saveNow () {
-  clearTimeout(saveTimer)
+  if (saveTimer) clearTimeout(saveTimer)
   saveTimer = null
   return saveDraft({ ...draft }).catch((e) => { console.error('[facturero] draft:', e); toast(errorText(e), 'error') })
 }
 watch(draft, () => {
   if (!loaded.value || props.correcting) return
-  clearTimeout(saveTimer)
+  if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(saveNow, 800)
 }, { deep: true })
 onBeforeUnmount(() => { if (saveTimer) saveNow() })
@@ -130,7 +142,11 @@ onMounted(async () => {
 })
 
 // Línea que tiene abierto el selector de productos (una a la vez), o null.
-const pickingLine = ref(null)
+const pickingLine = ref(/** @type {number | null} */ (null))
+/**
+ * @param {number} i
+ * @param {import('../types').Product} product
+ */
 function chooseProduct (i, product) {
   Object.assign(draft.lines[i], lineFromProduct(product))
   pickingLine.value = null
@@ -140,6 +156,7 @@ function addLine () {
   draft.lines.push(emptyLine())
 }
 
+/** @param {number} i */
 function removeLine (i) {
   draft.lines.splice(i, 1)
 }
@@ -169,10 +186,12 @@ async function saveForLater () {
   }
 }
 
+/** @returns {Promise<boolean>} */
 function askConfirm () {
   return new Promise((resolve) => { Object.assign(confirm, { open: true, resolve }) })
 }
 
+/** @param {boolean} ok */
 function answerConfirm (ok) {
   confirm.open = false
   confirm.resolve?.(ok)
@@ -185,14 +204,19 @@ async function submit () {
     toast(t('errors.invalid-draft'), 'error')
     return
   }
-  if (!currentSigner(issuer.value.id)) {
-    const signature = state.signatures.find((s) => s.issuerId === issuer.value.id)
+  // Sin emisor ya hay un problema y no se llega aquí; se comprueba igual en vez de suponerlo.
+  const iss = issuer.value
+  if (!iss) return
+  if (!currentSigner(iss.id)) {
+    const signature = state.signatures.find((s) => s.issuerId === iss.id)
+    if (!signature) { toast(errorText(codeError('no-signature', `the issuer ${iss.id} has no signature`)), 'error'); return }
     const unlocked = await requestUnlock(signature)
     if (!unlocked) return
   }
-  if (issuer.value.environment === '2' && !(await askConfirm())) return
+  if (iss.environment === '2' && !(await askConfirm())) return
 
   busy.value = true
+  /** @type {import('../types').OnProgress} */
   const onProgress = (step) => { progress.value = t(`form.progress.${step}`) }
   const savedKey = draft.savedKey
   try {
@@ -239,7 +263,7 @@ async function submit () {
       <select v-model="draft.issuerId" :disabled="Boolean(correcting) || choices.length === 0" :aria-label="t('form.issuer')" data-testid="issuer-select">
         <option value="">{{ t('form.chooseIssuer') }}</option>
         <!-- Al corregir, el emisor es el de la factura aunque hoy no sirva para emitir. -->
-        <option v-if="correcting && issuer && !choices.some((c) => c.id === issuer.id)" :value="issuer.id">{{ issuerName(issuer) }} · RUC {{ issuer.ruc }}</option>
+        <option v-if="correcting && issuer && !choices.some((c) => c.id === issuer?.id)" :value="issuer.id">{{ issuerName(issuer) }} · RUC {{ issuer.ruc }}</option>
         <option v-for="i in choices" :key="i.id" :value="i.id">
           {{ issuerName(i) }} · RUC {{ i.ruc }} · {{ i.establishment }}-{{ i.emissionPoint }} · {{ i.environment === '2' ? t('settings.envProd') : t('settings.envTest') }}
         </option>

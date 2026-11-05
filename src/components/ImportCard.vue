@@ -8,28 +8,32 @@ import { readSheet } from '../import/xls.js'
 import { importBuyers, importProducts } from '../import/factureroMovil.js'
 import { saveMany } from '../lib/repo.js'
 
+/** @import { PropType } from 'vue' */
+/** @typedef {import('../types').ImportedBuyer | import('../types').ImportedProduct} ImportedItem */
+
 const props = defineProps({
-  kind: { type: String, required: true },   // 'buyers' | 'products'
+  kind: { type: /** @type {PropType<'buyers' | 'products'>} */ (String), required: true },
 })
 
-const fileInput = ref(null)
+const fileInput = ref(/** @type {HTMLInputElement | null} */ (null))
 const fileName = ref('')
-const preview = ref(null)     // { items }
+const preview = ref(/** @type {{ items: ImportedItem[] } | null} */ (null))
 const error = ref('')
 const busy = ref(false)
-const done = ref(null)        // cuántos se importaron
+const done = ref(/** @type {number | null} */ (null))        // cuántos se importaron
 
 const counts = computed(() => {
   const c = { new: 0, exists: 0, invalid: 0, skip: 0 }
   for (const i of preview.value?.items || []) c[i.status]++
   return c
 })
-const label = (item) => props.kind === 'buyers'
+const label = (/** @type {ImportedItem} */ item) => 'buyer' in item
   ? { name: item.buyer.name, id: item.buyer.id }
   : { name: item.product.description, id: item.product.code }
 
+/** @param {Event} e */
 async function onFile (e) {
-  const file = e.target.files?.[0]
+  const file = /** @type {HTMLInputElement} */ (e.target).files?.[0]
   preview.value = null
   error.value = ''
   done.value = null
@@ -47,17 +51,27 @@ async function onFile (e) {
 async function confirm () {
   busy.value = true
   try {
-    const items = preview.value.items.filter((i) => i.status === 'new').map((i) => (props.kind === 'buyers' ? i.buyer : i.product))
+    if (!preview.value) throw new Error('facturero: nothing to import')
+    const items = preview.value.items.filter((i) => i.status === 'new').map((i) => ('buyer' in i ? i.buyer : i.product))
     done.value = await saveMany(props.kind, items)
     await refreshSettings()
     preview.value = null
-    if (fileInput.value) fileInput.value.value = ''
+    clearFile()
   } catch (err) {
     console.error('[facturero] import save:', err)
     toast(errorText(err), 'error')
   } finally {
     busy.value = false
   }
+}
+
+function clearFile () {
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+function cancelPreview () {
+  preview.value = null
+  clearFile()
 }
 </script>
 
@@ -95,7 +109,7 @@ async function confirm () {
         </table>
       </div>
       <div class="actions">
-        <button type="button" class="btn ghost" :disabled="busy" @click="preview = null; fileInput.value = ''">{{ t('form.cancel') }}</button>
+        <button type="button" class="btn ghost" :disabled="busy" @click="cancelPreview">{{ t('form.cancel') }}</button>
         <button type="button" class="btn primary" :disabled="busy || counts.new === 0" data-testid="import-confirm" @click="confirm">
           {{ t(`import.${kind}.confirm`, { count: counts.new }) }}
         </button>

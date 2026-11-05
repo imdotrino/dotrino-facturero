@@ -21,16 +21,24 @@
 import { getIdentity } from '../services/identity.js'
 import { listSignatureRecords, getSignatureRecord, saveSignatureRecord } from './repo.js'
 import { bytesToBase64, base64ToBytes } from './bytes.js'
-import { codeError } from './errors.js'
+import { codeError, messageOf } from './errors.js'
+
+/** @typedef {import('../types').Signer} Signer */
+/** @typedef {import('../types').CertificateInfo} CertificateInfo */
+/** Un archivo de firma ya abierto, sin guardar. @typedef {{ bytes: Uint8Array, signer: Signer, info: CertificateInfo, fileName: string }} OpenedSignature */
 
 /** issuerId → firmador desbloqueado. No se expone a Vue: un Proxy rompe la CryptoKey. */
+/** @type {Map<string, Signer>} */
 const signers = new Map()
+/** @type {Set<() => void>} */
 const listeners = new Set()
 
+/** @param {string} issuerId */
 export function currentSigner (issuerId) {
   return signers.get(issuerId) || null
 }
 
+/** @param {() => void} fn */
 export function onSignerChange (fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
@@ -40,12 +48,14 @@ function changed () {
   for (const fn of listeners) fn()
 }
 
+/** @param {string} issuerId */
 export function lock (issuerId) {
   signers.delete(issuerId)
   changed()
 }
 
 /** Las firmas guardadas, una por emisor, con lo que se puede enseñar de cada una. */
+/** @returns {Promise<import('../types').StoredSignature[]>} */
 export async function storedSignatures () {
   return (await listSignatureRecords()).map((r) => ({
     issuerId: r.issuerId,
@@ -60,6 +70,11 @@ export async function storedSignatures () {
  * Abre el archivo con su contraseña, SIN guardar nada: así una contraseña equivocada se
  * sabe antes de guardar el emisor. Lo que devuelve se pasa a `attachSignature`.
  */
+/**
+ * @param {File} file
+ * @param {string} password
+ * @returns {Promise<OpenedSignature>}
+ */
 export async function openSignatureFile (file, password) {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const { openP12 } = await import('../sri/p12.js')
@@ -72,6 +87,10 @@ export async function openSignatureFile (file, password) {
  * emparejado y sin su copia), se para: no hay otra llave con la que valga la pena guardar.
  * Antes de devolver se abre el sello: si no abre aquí, no abrirá nunca.
  */
+/**
+ * @param {import('@dotrino/identity').Identity} id
+ * @param {string} plaintext
+ */
 async function seal (id, plaintext) {
   if (!await id.contentKey()) throw codeError('seal-no-profile-key', 'this device does not hold the account content key yet')
   const envelope = await id.sealContent(plaintext)
@@ -80,6 +99,10 @@ async function seal (id, plaintext) {
 }
 
 /** Sella y guarda la firma abierta como la de ese emisor, y la deja desbloqueada. */
+/**
+ * @param {string} issuerId
+ * @param {OpenedSignature} opened
+ */
 export async function attachSignature (issuerId, opened) {
   const id = await getIdentity()
   const sealed = await seal(id, bytesToBase64(opened.bytes))
@@ -93,14 +116,23 @@ export async function attachSignature (issuerId, opened) {
  * Da al emisor nuevo la misma firma que el original (ya sellada: no hace falta volver a
  * pedir el archivo). Si el original estaba desbloqueado, la copia también.
  */
+/**
+ * @param {string} fromIssuerId
+ * @param {string} toIssuerId
+ */
 export async function copySignature (fromIssuerId, toIssuerId) {
   const r = await getSignatureRecord(fromIssuerId)
   await saveSignatureRecord(toIssuerId, r)
-  if (signers.has(fromIssuerId)) signers.set(toIssuerId, signers.get(fromIssuerId))
+  const signer = signers.get(fromIssuerId)
+  if (signer) signers.set(toIssuerId, signer)
   changed()
 }
 
 /** Abre con su contraseña la firma guardada de un emisor. */
+/**
+ * @param {string} issuerId
+ * @param {string} password
+ */
 export async function unlockSignature (issuerId, password) {
   const r = await getSignatureRecord(issuerId)
   const id = await getIdentity()
@@ -109,7 +141,7 @@ export async function unlockSignature (issuerId, password) {
   try {
     plaintext = await id.openContent(r.envelope)
   } catch (e) {
-    throw codeError('seal-no-profile-key', `the saved signature cannot be opened with the account key on this device: ${e?.message || e}`, { cause: e })
+    throw codeError('seal-no-profile-key', `the saved signature cannot be opened with the account key on this device: ${messageOf(e)}`, { cause: e })
   }
   const { openP12 } = await import('../sri/p12.js')
   const { signer, info } = await openP12(base64ToBytes(plaintext), password)
@@ -120,6 +152,7 @@ export async function unlockSignature (issuerId, password) {
 }
 
 /** Se llama al quitar un emisor: su firma deja de estar en memoria. */
+/** @param {string} issuerId */
 export function forgetSigner (issuerId) {
   signers.delete(issuerId)
   changed()

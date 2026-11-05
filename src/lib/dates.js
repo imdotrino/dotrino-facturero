@@ -16,6 +16,10 @@ export function ecuadorMonth (now = new Date()) {
   return ecuadorToday(now).day.slice(0, 7)
 }
 
+/**
+ * @param {string} month  'aaaa-mm'
+ * @param {number} delta  meses
+ */
 export function shiftMonth (month, delta) {
   const [y, m] = month.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + delta, 1))

@@ -4,16 +4,16 @@ import { t, errorText } from '../i18n.js'
 import { state, refreshSettings, toast } from '../state.js'
 import { removeProduct } from '../lib/repo.js'
 import { searchProducts } from '../lib/products.js'
-import { VAT_RATES } from '../sri/catalog.js'
+import { vatRate } from '../sri/catalog.js'
 import { money } from '../lib/format.js'
 import ProductForm from './ProductForm.vue'
 
 const query = ref('')
-const editing = ref(null)     // clave del producto, 'new', o null
-const toRemove = ref(null)
+const editing = ref(/** @type {string | null} */ (null))     // clave del producto, 'new', o null
+const toRemove = ref(/** @type {import('../types').StoredProduct | null} */ (null))
 
 const shown = computed(() => searchProducts(state.products, query.value))
-const vatLabel = (code) => t(`vat.${VAT_RATES.find((v) => v.code === code).key}`)
+const vatLabel = (/** @type {string} */ code) => t(`vat.${vatRate(code).key}`)
 
 async function onSaved () {
   editing.value = null
@@ -24,6 +24,7 @@ async function onSaved () {
 async function confirmRemove () {
   const product = toRemove.value
   toRemove.value = null
+  if (!product) return
   try {
     await removeProduct(product.key)
     await refreshSettings()

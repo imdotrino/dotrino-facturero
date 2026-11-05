@@ -30,6 +30,16 @@ import { getStore } from '../services/store.js'
 import { isBlankDraft, toSaved } from './drafts.js'
 import { codeError } from './errors.js'
 
+/** @typedef {import('../types').Issuer} Issuer */
+/** @typedef {import('../types').IssuerData} IssuerData */
+/** @typedef {import('../types').Buyer} Buyer */
+/** @typedef {import('../types').Product} Product */
+/** @typedef {import('../types').Draft} Draft */
+/** @typedef {import('../types').SavedDraft} SavedDraft */
+/** @typedef {import('../types').Invoice} Invoice */
+/** @typedef {import('../types').SignatureRecord} SignatureRecord */
+/** Una entrada del almacén con su id (todas lo llevan: se escriben con él). @typedef {import('@dotrino/store').ThreadEntry & { id: string }} Entry */
+
 const SETTINGS = 'facturero.settings'
 const INVOICES_PREFIX = 'facturero.invoices.'
 const BUYERS = 'facturero.buyers'
@@ -39,6 +49,7 @@ const ISSUER_PREFIX = 'issuer:'
 const SIGNATURE_PREFIX = 'signature:'
 const LOGO_PREFIX = 'logo:'
 
+/** @type {Readonly<IssuerData>} */
 export const EMPTY_ISSUER = Object.freeze({
   ruc: '',
   legalName: '',
@@ -55,11 +66,16 @@ export const EMPTY_ISSUER = Object.freeze({
   environment: '1',
 })
 
+/** @returns {Promise<Entry[]>} */
 async function settings () {
   const store = await getStore()
-  return store.listThread(SETTINGS)
+  return /** @type {Entry[]} */ (await store.listThread(SETTINGS))
 }
 
+/**
+ * @param {string} id
+ * @param {object} value
+ */
 async function writeSetting (id, value) {
   const store = await getStore()
   // JSON: lo que llega de Vue puede ser un Proxy reactivo, y postMessage no lo clona.
@@ -67,6 +83,7 @@ async function writeSetting (id, value) {
   return store.appendMessage(SETTINGS, { ...plain, id, ts: Date.now() })
 }
 
+/** @param {string} id */
 async function removeSetting (id) {
   const store = await getStore()
   return store.removeMessage(SETTINGS, id)
@@ -74,19 +91,29 @@ async function removeSetting (id) {
 
 // ---------- emisores ----------
 
-const toIssuer = ({ id, ts, ...rest }) => ({ ...rest, id: id.slice(ISSUER_PREFIX.length) })
+/**
+ * @param {Entry} entry
+ * @returns {Issuer}
+ */
+const toIssuer = ({ id, ts, ...rest }) => /** @type {Issuer} */ ({ ...rest, id: id.slice(ISSUER_PREFIX.length) })
 
+/** @returns {Promise<Issuer[]>} */
 export async function listIssuers () {
   return (await settings()).filter((e) => e.id.startsWith(ISSUER_PREFIX)).map(toIssuer)
 }
 
+/** @param {string} issuerId */
 export async function getIssuer (issuerId) {
   const e = (await settings()).find((x) => x.id === ISSUER_PREFIX + issuerId)
   if (!e) throw codeError('issuer-not-found', `there is no issuer ${issuerId}`)
   return toIssuer(e)
 }
 
-/** Guarda un emisor. Sin `id` es uno nuevo. Devuelve el emisor con su id. */
+/**
+ * Guarda un emisor. Sin `id` es uno nuevo. Devuelve el emisor con su id.
+ * @param {IssuerData & { id?: string }} issuer
+ * @returns {Promise<Issuer>}
+ */
 export async function saveIssuer (issuer) {
   const { id, ...data } = issuer
   const issuerId = id || crypto.randomUUID()
@@ -95,6 +122,7 @@ export async function saveIssuer (issuer) {
 }
 
 /** Quita el emisor, su firma y su logo. Las facturas ya emitidas se quedan (llevan su copia). */
+/** @param {string} issuerId */
 export async function removeIssuer (issuerId) {
   await removeSetting(LOGO_PREFIX + issuerId)
   await removeSetting(SIGNATURE_PREFIX + issuerId)
@@ -103,19 +131,30 @@ export async function removeIssuer (issuerId) {
 
 // ---------- la firma de cada emisor ----------
 
-/** Registros de firma, cada uno con el `issuerId` al que pertenece. */
+/**
+ * Registros de firma, cada uno con el `issuerId` al que pertenece.
+ * @returns {Promise<SignatureRecord[]>}
+ */
 export async function listSignatureRecords () {
   return (await settings())
     .filter((e) => e.id.startsWith(SIGNATURE_PREFIX))
-    .map((e) => ({ ...e, issuerId: e.id.slice(SIGNATURE_PREFIX.length) }))
+    .map((e) => /** @type {SignatureRecord} */ ({ ...e, issuerId: e.id.slice(SIGNATURE_PREFIX.length) }))
 }
 
+/**
+ * @param {string} issuerId
+ * @returns {Promise<SignatureRecord>}
+ */
 export async function getSignatureRecord (issuerId) {
   const e = (await settings()).find((x) => x.id === SIGNATURE_PREFIX + issuerId)
   if (!e) throw codeError('no-signature', `the issuer ${issuerId} has no signature`)
-  return e
+  return /** @type {SignatureRecord} */ (e)
 }
 
+/**
+ * @param {string} issuerId
+ * @param {Pick<SignatureRecord, 'envelope' | 'seal' | 'info' | 'fileName'>} record
+ */
 export function saveSignatureRecord (issuerId, { envelope, seal, info, fileName }) {
   return writeSetting(SIGNATURE_PREFIX + issuerId, { envelope, seal, info, fileName })
 }
@@ -124,16 +163,22 @@ export function saveSignatureRecord (issuerId, { envelope, seal, info, fileName 
 
 // Aparte del emisor y no dentro: el emisor se reescribe en cada factura (sube el secuencial),
 // y el logo no tiene por qué viajar otra vez a la bóveda cada vez.
+/** @returns {Promise<import('../types').IssuerLogo[]>} */
 export async function listLogos () {
   return (await settings())
     .filter((e) => e.id.startsWith(LOGO_PREFIX))
     .map((e) => ({ ...e.logo, issuerId: e.id.slice(LOGO_PREFIX.length) }))
 }
 
+/**
+ * @param {string} issuerId
+ * @param {import('../types').Logo} logo
+ */
 export function saveLogo (issuerId, { dataUrl, width, height }) {
   return writeSetting(LOGO_PREFIX + issuerId, { logo: { dataUrl, width, height } })
 }
 
+/** @param {string} issuerId */
 export function removeLogo (issuerId) {
   return removeSetting(LOGO_PREFIX + issuerId)
 }
@@ -142,12 +187,17 @@ export function removeLogo (issuerId) {
 
 // El comprador va ANIDADO en la entrada: su `id` es el número de identificación, y el `id`
 // de la entrada es la clave del almacén. Juntos, uno pisaba al otro.
+/** @returns {Promise<import('../types').StoredBuyer[]>} */
 export async function listBuyers () {
   const store = await getStore()
   return (await store.listThread(BUYERS)).map((e) => ({ ...e.buyer, key: e.id }))
 }
 
-/** Guarda un comprador. Sin `key` es uno nuevo. Devuelve el comprador con su clave. */
+/**
+ * Guarda un comprador. Sin `key` es uno nuevo. Devuelve el comprador con su clave.
+ * @param {Buyer} buyer
+ * @returns {Promise<import('../types').StoredBuyer>}
+ */
 export async function saveBuyer (buyer) {
   const { key, ...data } = JSON.parse(JSON.stringify(buyer))
   const entryId = key || crypto.randomUUID()
@@ -156,6 +206,7 @@ export async function saveBuyer (buyer) {
   return { ...data, key: entryId }
 }
 
+/** @param {string} key */
 export async function removeBuyer (key) {
   const store = await getStore()
   return store.removeMessage(BUYERS, key)
@@ -164,11 +215,16 @@ export async function removeBuyer (key) {
 // ---------- productos ----------
 
 // Anidado por la misma razón que el comprador: el `id` de la entrada es del almacén.
+/** @returns {Promise<import('../types').StoredProduct[]>} */
 export async function listProducts () {
   const store = await getStore()
   return (await store.listThread(PRODUCTS)).map((e) => ({ ...e.product, key: e.id }))
 }
 
+/**
+ * @param {Product} product
+ * @returns {Promise<import('../types').StoredProduct>}
+ */
 export async function saveProduct (product) {
   const { key, ...data } = JSON.parse(JSON.stringify(product))
   const entryId = key || crypto.randomUUID()
@@ -180,17 +236,22 @@ export async function saveProduct (product) {
 /**
  * Guarda muchos de una vez (una sola escritura del almacén en vez de una por fila).
  * @param {'buyers'|'products'} kind
+ * @param {Array<Buyer | Product>} items
+ * @returns {Promise<number>}
  */
 export async function saveMany (kind, items) {
   const thread = kind === 'buyers' ? BUYERS : PRODUCTS
   const field = kind === 'buyers' ? 'buyer' : 'product'
   const now = Date.now()
-  const entries = JSON.parse(JSON.stringify(items)).map(({ key, ...data }) => ({ id: key || crypto.randomUUID(), ts: now, [field]: data }))
+  /** @type {Array<Buyer | Product>} */
+  const plain = JSON.parse(JSON.stringify(items))
+  const entries = plain.map(({ key, ...data }) => ({ id: key || crypto.randomUUID(), ts: now, [field]: data }))
   const store = await getStore()
   await store.importThreads({ [thread]: entries }, 'merge')
   return entries.length
 }
 
+/** @param {string} key */
 export async function removeProduct (key) {
   const store = await getStore()
   return store.removeMessage(PRODUCTS, key)
@@ -202,20 +263,28 @@ export async function removeProduct (key) {
 // leerlo justo después (p. ej. «Continuar» un guardado) podía adelantarse a esa escritura y
 // perder lo último que se escribió. Leer espera a que termine; si falló, ya lo dijo quien
 // la lanzó.
+/** @type {Promise<unknown>} */
 let draftWrite = Promise.resolve()
 
+/**
+ * @template T
+ * @param {Promise<T>} p
+ * @returns {Promise<T>}
+ */
 function trackDraftWrite (p) {
   draftWrite = p.catch(() => {})
   return p
 }
 
 /** Borrador de la factura a medio escribir: sobrevive a una recarga de la página. */
+/** @returns {Promise<Draft | null>} */
 export async function loadDraft () {
   await draftWrite
   const e = (await settings()).find((x) => x.id === 'draft')
   return e ? e.draft : null
 }
 
+/** @param {Draft} draft */
 export function saveDraft (draft) {
   return trackDraftWrite(writeSetting('draft', { draft }))
 }
@@ -226,15 +295,22 @@ export function clearDraft () {
 
 // ---------- borradores guardados ----------
 
-/** Los borradores guardados, el más reciente primero: `{ key, savedAt, draft }`. */
+/**
+ * Los borradores guardados, el más reciente primero: `{ key, savedAt, draft }`.
+ * @returns {Promise<SavedDraft[]>}
+ */
 export async function listSavedDrafts () {
   const store = await getStore()
   return (await store.listThread(DRAFTS))
-    .map((e) => ({ key: e.id, savedAt: e.savedAt, draft: e.draft }))
+    .map((e) => ({ key: /** @type {string} */ (e.id), savedAt: e.savedAt, draft: e.draft }))
     .sort((a, b) => b.savedAt - a.savedAt)
 }
 
-/** Guarda un borrador. Con `key` actualiza ese; sin él, es uno nuevo. Devuelve la clave. */
+/**
+ * Guarda un borrador. Con `key` actualiza ese; sin él, es uno nuevo. Devuelve la clave.
+ * @param {Draft} draft
+ * @param {string} [key]
+ */
 export async function saveSavedDraft (draft, key) {
   const entryId = key || crypto.randomUUID()
   const store = await getStore()
@@ -243,6 +319,7 @@ export async function saveSavedDraft (draft, key) {
   return entryId
 }
 
+/** @param {string} key */
 export async function removeSavedDraft (key) {
   const store = await getStore()
   return store.removeMessage(DRAFTS, key)
@@ -252,19 +329,23 @@ export async function removeSavedDraft (key) {
  * Pone un borrador en el formulario. Si en el formulario había otro con algo escrito, no se
  * pierde: se guarda antes en Borradores (en su sitio si venía de uno guardado).
  * `savedKey` dice de qué borrador guardado viene; sin él, es uno nuevo.
+ * @param {Draft} draft
+ * @param {string} [savedKey]
  */
 export async function openInForm (draft, savedKey) {
   const current = await loadDraft()
-  if (!isBlankDraft(current) && (!savedKey || current.savedKey !== savedKey)) await saveSavedDraft(current, current.savedKey)
+  if (current && !isBlankDraft(current) && (!savedKey || current.savedKey !== savedKey)) await saveSavedDraft(current, current.savedKey)
   await saveDraft(savedKey ? { ...draft, savedKey } : draft)
 }
 
+/** @param {SavedDraft} saved */
 export function resumeSavedDraft (saved) {
   return openInForm(saved.draft, saved.key)
 }
 
 // ---------- facturas ----------
 
+/** @param {Invoice} invoice */
 export async function saveInvoice (invoice) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(invoice.day || '')) throw codeError('bad-invoice', `invoice without a valid day: ${invoice.day}`)
   const store = await getStore()
@@ -272,18 +353,28 @@ export async function saveInvoice (invoice) {
   return store.appendMessage(INVOICES_PREFIX + invoice.day, { ...plain, id: invoice.accessKey, ts: Date.now() })
 }
 
-/** Facturas de un mes ('aaaa-mm') de todos los emisores, la más reciente primero. */
+/**
+ * Facturas de un mes ('aaaa-mm') de todos los emisores, la más reciente primero.
+ * @param {string} month
+ * @returns {Promise<Invoice[]>}
+ */
 export async function listInvoices (month) {
   const store = await getStore()
   const keys = (await store.listThreadKeys()).filter((k) => k.startsWith(INVOICES_PREFIX + month))
+  /** @type {Invoice[]} */
   const all = []
-  for (const key of keys) all.push(...await store.listThread(key))
+  for (const key of keys) all.push(.../** @type {Invoice[]} */ (await store.listThread(key)))
   return all.sort((a, b) => b.createdAt - a.createdAt)
 }
 
+/**
+ * @param {string} day
+ * @param {string} accessKey
+ * @returns {Promise<Invoice | null>}
+ */
 export async function getInvoice (day, accessKey) {
   const store = await getStore()
-  const entries = await store.listThread(INVOICES_PREFIX + day)
+  const entries = /** @type {Invoice[]} */ (await store.listThread(INVOICES_PREFIX + day))
   return entries.find((e) => e.id === accessKey) || null
 }
 

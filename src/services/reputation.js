@@ -2,6 +2,7 @@
 import { createVaultReputation } from '@dotrino/reputation'
 import { getIdentity } from './identity.js'
 
+/** @type {import('@dotrino/reputation').VaultReputation | null} */
 let reputation = null
 
 export async function getReputation () {

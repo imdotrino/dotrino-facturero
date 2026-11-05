@@ -29,6 +29,10 @@ const STOP = 106
 export { PATTERNS }
 
 /** Valores de símbolo (sin el de control ni el de parada) para un texto ASCII imprimible. */
+/**
+ * @param {string} text
+ * @returns {number[]}
+ */
 export function encodeValues (text) {
   if (!/^[\x20-\x7e]*$/.test(text)) throw codeError('bad-code128-text', 'code128: only printable ASCII is supported')
   const values = []
@@ -51,6 +55,7 @@ export function encodeValues (text) {
   return values
 }
 
+/** @param {number[]} values */
 export function checksum (values) {
   let sum = values[0]
   for (let i = 1; i < values.length; i++) sum += values[i] * i
@@ -58,6 +63,7 @@ export function checksum (values) {
 }
 
 /** Anchos de barras y espacios alternados, empezando por barra. */
+/** @param {string} text */
 export function modules (text) {
   const values = encodeValues(text)
   const all = [...values, checksum(values), STOP]
@@ -81,6 +87,10 @@ export function code128Svg (text, { height = 40, quiet = 10 } = {}) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${height}" preserveAspectRatio="none" shape-rendering="crispEdges" role="img" aria-label="${text}"><rect width="${total}" height="${height}" fill="#fff"/><g fill="#000">${rects}</g></svg>`
 }
 
+/**
+ * @param {string} text
+ * @param {number} from
+ */
 function digitRun (text, from) {
   let n = 0
   while (from + n < text.length && text.charCodeAt(from + n) >= 48 && text.charCodeAt(from + n) <= 57) n++

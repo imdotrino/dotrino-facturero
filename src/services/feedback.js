@@ -8,16 +8,17 @@
 // manda es una MUESTRA de lo que se quiere importar, no el archivo entero (dueño,
 // 2026-09-16).
 import { getIdentity } from './identity.js'
-import { codeError } from '../lib/errors.js'
+import { codeError, messageOf } from '../lib/errors.js'
 import { bytesToBase64 } from '../lib/bytes.js'
 
 export const FEEDBACK_URL = 'https://feedback.dotrino.com/'
 export const MAX_ATTACHMENT_BYTES = 1024 * 1024
 export const ATTACHMENT_EXTENSIONS = ['xls', 'xlsx', 'xlsm', 'ods', 'csv', 'txt', 'xml', 'json', 'pdf', 'zip']
 
+/** @param {File | null | undefined} file */
 export function attachmentProblem (file) {
   if (!file) return null
-  const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : ''
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : ''
   if (!ATTACHMENT_EXTENSIONS.includes(ext)) return 'attachment-type'
   if (file.size > MAX_ATTACHMENT_BYTES) return 'attachment-too-large'
   if (file.size === 0) return 'attachment-empty'
@@ -59,7 +60,7 @@ export async function requestImporter ({ text, contact, locale, file = null, fet
         body: JSON.stringify(meta),
       })
   } catch (e) {
-    throw codeError('feedback-unreachable', `could not reach the feedback relay: ${e?.message || e}`)
+    throw codeError('feedback-unreachable', `could not reach the feedback relay: ${messageOf(e)}`)
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -68,6 +69,7 @@ export async function requestImporter ({ text, contact, locale, file = null, fet
   }
 }
 
+/** @param {string} s */
 function base64url (s) {
   return bytesToBase64(new TextEncoder().encode(s)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }

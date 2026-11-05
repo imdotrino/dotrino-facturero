@@ -14,23 +14,25 @@ export const INVOICE_VERSION = '1.1.0'
 export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>'
 
 /** Escapado de texto de C14N. */
+/** @param {unknown} s */
 export function escapeText (s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r/g, '&#xD;')
 }
 
 /** Escapado de atributo de C14N. */
+/** @param {unknown} s */
 export function escapeAttr (s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
     .replace(/\t/g, '&#x9;').replace(/\n/g, '&#xA;').replace(/\r/g, '&#xD;')
 }
 
-const el = (name, text) => `<${name}>${escapeText(text)}</${name}>`
-const opt = (name, text) => (text === undefined || text === null || text === '' ? '' : el(name, text))
+const el = (/** @type {string} */ name, /** @type {unknown} */ text) => `<${name}>${escapeText(text)}</${name}>`
+const opt = (/** @type {string} */ name, /** @type {unknown} */ text) => (text === undefined || text === null || text === '' ? '' : el(name, text))
 
 /**
  * @param {object} p
- * @param {object} p.issuer      datos del emisor (ver src/lib/store.js)
- * @param {object} p.draft       comprador, líneas y pago
+ * @param {import('../types').IssuerData} p.issuer  datos del emisor (ver src/lib/repo.js)
+ * @param {import('../types').DraftWithBuyer} p.draft  comprador, líneas y pago
  * @param {string} p.accessKey   clave de acceso de 49 dígitos
  * @param {string} p.sequential  9 dígitos
  * @param {string} p.issueDate   dd/mm/aaaa (la misma que va en la clave)
@@ -115,7 +117,12 @@ export function buildInvoiceXml ({ issuer, draft, accessKey, sequential, issueDa
     infoTributaria + infoFactura + detalles + infoAdicional + '</factura>'
 }
 
+/**
+ * @param {Partial<import('../types').Buyer>} buyer
+ * @returns {Array<[string, string]>}
+ */
 function additionalFields (buyer) {
+  /** @type {Array<[string, string]>} */
   const out = []
   const email = cleanText(buyer.email)
   const phone = cleanText(buyer.phone)
@@ -124,6 +131,7 @@ function additionalFields (buyer) {
   return out
 }
 
+/** @param {string} text */
 export function toBase64Utf8 (text) {
   return bytesToBase64(new TextEncoder().encode(text))
 }

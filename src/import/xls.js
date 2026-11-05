@@ -20,7 +20,10 @@ const OLE_MAGIC = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]
 const ENDOFCHAIN = 0xFFFFFFFE
 const FREESECT = 0xFFFFFFFF
 
-/** @returns {string[][]} filas de la primera hoja, cada celda como texto */
+/**
+ * @param {unknown} bytes  el archivo (Uint8Array; otra cosa se rechaza)
+ * @returns {string[][]} filas de la primera hoja, cada celda como texto
+ */
 export function readSheet (bytes) {
   if (!(bytes instanceof Uint8Array)) throw codeError('bad-file', 'expected a Uint8Array')
   if (OLE_MAGIC.every((b, i) => bytes[i] === b)) return readBiff8(readCompoundStream(bytes, ['Workbook', 'Book']))
@@ -32,6 +35,11 @@ export function readSheet (bytes) {
 
 // ---------- contenedor OLE2 (MS-CFB) ----------
 
+/**
+ * @param {Uint8Array} bytes
+ * @param {string[]} names  nombres aceptados del flujo
+ * @returns {Uint8Array}
+ */
 export function readCompoundStream (bytes, names) {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const sectorSize = 1 << dv.getUint16(0x1E, true)
@@ -44,9 +52,10 @@ export function readCompoundStream (bytes, names) {
   const sectorCount = Math.floor((bytes.length - sectorSize) / sectorSize) + 1
   if (sectorSize !== 512 && sectorSize !== 4096) throw codeError('bad-xls', `unexpected sector size ${sectorSize}`)
 
-  const sectorOffset = (n) => (n + 1) * sectorSize
+  const sectorOffset = (/** @type {number} */ n) => (n + 1) * sectorSize
 
   // Tabla de sectores FAT: 109 en la cabecera y el resto encadenados en sectores DIFAT.
+  /** @type {number[]} */
   const fatSectors = []
   for (let i = 0; i < 109; i++) {
     const s = dv.getUint32(0x4C + i * 4, true)
@@ -73,6 +82,13 @@ export function readCompoundStream (bytes, names) {
 
   // Sigue una cadena hasta ENDOFCHAIN o hasta tener `size` bytes. El tope de vueltas evita
   // un bucle infinito si la cadena se muerde la cola.
+  /**
+   * @param {number} start
+   * @param {number | null} size  bytes; null = hasta el final de la cadena
+   * @param {Uint32Array} table
+   * @param {number} unit
+   * @param {(n: number) => Uint8Array} read
+   */
   const chain = (start, size, table, unit, read) => {
     const out = new Uint8Array(size ?? table.length * unit)
     let got = 0
@@ -87,12 +103,13 @@ export function readCompoundStream (bytes, names) {
     }
     return size == null ? out.subarray(0, got) : out.subarray(0, got)
   }
-  const readSector = (n) => {
+  const readSector = (/** @type {number} */ n) => {
     if (n >= sectorCount) throw codeError('bad-xls', `sector ${n} is out of the file`)
     return bytes.subarray(sectorOffset(n), sectorOffset(n) + sectorSize)
   }
 
   const dir = chain(firstDirSector, null, fat, sectorSize, readSector)
+  /** @type {Array<{ name: string, type: number, start: number, size: number }>} */
   const entries = []
   for (let off = 0; off + 128 <= dir.length; off += 128) {
     const e = new DataView(dir.buffer, dir.byteOffset + off, 128)
@@ -117,7 +134,7 @@ export function readCompoundStream (bytes, names) {
   const mdv = new DataView(miniFatBytes.buffer, miniFatBytes.byteOffset, miniFatBytes.byteLength)
   for (let i = 0; i < miniFat.length; i++) miniFat[i] = mdv.getUint32(i * 4, true)
   return chain(entry.start, entry.size, miniFat, miniSectorSize,
-    (n) => miniStream.subarray(n * miniSectorSize, (n + 1) * miniSectorSize))
+    (/** @type {number} */ n) => miniStream.subarray(n * miniSectorSize, (n + 1) * miniSectorSize))
 }
 
 // ---------- BIFF8 ----------
@@ -128,8 +145,13 @@ const R = {
   BOOLERR: 0x0205, BOUNDSHEET: 0x0085,
 }
 
+/**
+ * @param {Uint8Array} wb  el flujo del libro
+ * @returns {string[][]}
+ */
 export function readBiff8 (wb) {
   const dv = new DataView(wb.buffer, wb.byteOffset, wb.byteLength)
+  /** @type {Array<{ type: number, off: number, data: Uint8Array }>} */
   const records = []
   for (let off = 0; off + 4 <= wb.length;) {
     const type = dv.getUint16(off, true)
@@ -139,7 +161,9 @@ export function readBiff8 (wb) {
     off += 4 + len
   }
 
+  /** @type {string[]} */
   let sst = []
+  /** @type {number | null} */
   let firstSheetPos = null
   let i = 0
   for (; i < records.length; i++) {
@@ -158,7 +182,13 @@ export function readBiff8 (wb) {
   }
   if (firstSheetPos === null) throw codeError('bad-xls', 'the workbook has no worksheet')
 
+  /** @type {string[][]} */
   const rows = []
+  /**
+   * @param {number} row
+   * @param {number} col
+   * @param {string} value
+   */
   const put = (row, col, value) => {
     while (rows.length <= row) rows.push([])
     const line = rows[row]
@@ -167,6 +197,7 @@ export function readBiff8 (wb) {
   }
   const start = records.findIndex((r) => r.off === firstSheetPos)
   if (start < 0 || records[start].type !== R.BOF) throw codeError('bad-xls', 'the worksheet does not start where the workbook says')
+  /** @type {{ row: number, col: number } | null} */
   let pendingFormula = null
   for (let j = start + 1; j < records.length; j++) {
     const r = records[j]
@@ -223,6 +254,10 @@ export function readBiff8 (wb) {
 }
 
 /** Tabla de cadenas compartidas, que puede partirse en registros CONTINUE a mitad de cadena. */
+/**
+ * @param {Uint8Array[]} parts
+ * @returns {string[]}
+ */
 function readSst (parts) {
   let p = 0
   let pos = 0
@@ -231,9 +266,10 @@ function readSst (parts) {
   const u8 = () => { if (avail() === 0) next(); return parts[p][pos++] }
   const u16 = () => u8() | (u8() << 8)
   const u32 = () => (u16() | (u16() << 16)) >>> 0
-  const skip = (n) => { while (n > 0) { if (avail() === 0) next(); const k = Math.min(n, avail()); pos += k; n -= k } }
+  const skip = (/** @type {number} */ n) => { while (n > 0) { if (avail() === 0) next(); const k = Math.min(n, avail()); pos += k; n -= k } }
 
   const count = (() => { u32(); return u32() })()
+  /** @type {string[]} */
   const out = []
   for (let s = 0; s < count && parts[p]; s++) {
     if (avail() === 0) next()
@@ -263,6 +299,10 @@ function readSst (parts) {
   return out
 }
 
+/**
+ * @param {Uint8Array} data
+ * @param {number} offset
+ */
 function readXlUnicodeString (data, offset) {
   const d = view(data)
   const cch = d.getUint16(offset, true)
@@ -272,6 +312,7 @@ function readXlUnicodeString (data, offset) {
   return { text: wide ? decodeUtf16le(chunk) : latin1(chunk) }
 }
 
+/** @param {number} rk */
 function rkValue (rk) {
   const div100 = rk & 1
   let v
@@ -285,6 +326,7 @@ function rkValue (rk) {
   return div100 ? v / 100 : v
 }
 
+/** @param {number} n */
 function numberText (n) {
   if (!Number.isFinite(n)) return String(n)
   if (Number.isInteger(n)) return String(n)
@@ -294,11 +336,17 @@ function numberText (n) {
 // ---------- tabla HTML ----------
 
 /** Todas las tablas del HTML, seguidas: los reportes ponen la cabecera en una y los datos en otra. */
+/**
+ * @param {string} html
+ * @returns {string[][]}
+ */
 export function readHtmlTable (html) {
   const tables = [...html.matchAll(/<table[\s\S]*?<\/table>/gi)]
   if (tables.length === 0) throw codeError('unsupported-format', 'no table in the HTML')
+  /** @type {string[][]} */
   const rows = []
   for (const tr of tables.map((t) => t[0]).join('\n').matchAll(/<tr[\s>][\s\S]*?<\/tr>/gi)) {
+    /** @type {string[]} */
     const cells = []
     for (const td of tr[0].matchAll(/<t([dh])(\s[^>]*)?>([\s\S]*?)<\/t\1>/gi)) {
       const span = Number((td[2] || '').match(/colspan\s*=\s*["']?(\d+)/i)?.[1] || 1)
@@ -312,6 +360,7 @@ export function readHtmlTable (html) {
 
 // Las entidades con nombre que usan los exportadores en español. `&amp;` va en la misma
 // pasada que las demás, así «&amp;lt;» queda como «&lt;» y no como «<».
+/** @type {Record<string, string>} */
 const NAMED = {
   nbsp: ' ', lt: '<', gt: '>', quot: '"', apos: "'", amp: '&',
   aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', ntilde: 'ñ', uuml: 'ü',
@@ -319,13 +368,14 @@ const NAMED = {
   ordm: 'º', ordf: 'ª', deg: '°', iquest: '¿', iexcl: '¡',
 }
 
+/** @param {string} s */
 function htmlText (s) {
   return s
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]+>/g, '')
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in NAMED ? NAMED[name] : m))
+    .replace(/&#x([0-9a-f]+);/gi, (/** @type {string} */ _, /** @type {string} */ h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (/** @type {string} */ _, /** @type {string} */ d) => String.fromCodePoint(Number(d)))
+    .replace(/&([a-zA-Z]+);/g, (/** @type {string} */ m, /** @type {string} */ name) => (name in NAMED ? NAMED[name] : m))
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -334,6 +384,7 @@ function htmlText (s) {
  * UTF-8 si el archivo lo es; si no, Windows-1252, que es lo que usan los exportadores de
  * Excel en español cuando no dicen nada. Una meta charset explícita manda.
  */
+/** @param {Uint8Array} bytes */
 function decodeText (bytes) {
   const head = latin1(bytes.subarray(0, 2048))
   const declared = head.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]
@@ -345,7 +396,7 @@ function decodeText (bytes) {
   }
 }
 
-const view = (u8) => new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
-const latin1 = (u8) => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return s }
-const decodeUtf16le = (u8) => new TextDecoder('utf-16le').decode(u8)
+const view = (/** @type {Uint8Array} */ u8) => new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
+const latin1 = (/** @type {Uint8Array} */ u8) => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return s }
+const decodeUtf16le = (/** @type {Uint8Array} */ u8) => new TextDecoder('utf-16le').decode(u8)
 

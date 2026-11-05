@@ -28,6 +28,7 @@ jobs:
       # Las pruebas validan contra el XSD oficial del SRI con xmllint y generan
       # certificados de prueba con openssl.
       - run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+      - run: npm run type-check
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5

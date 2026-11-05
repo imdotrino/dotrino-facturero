@@ -6,8 +6,8 @@ import ImportCard from './ImportCard.vue'
 
 const text = ref('')
 const contact = ref('')
-const file = ref(null)
-const fileInput = ref(null)
+const file = ref(/** @type {File | null} */ (null))
+const fileInput = ref(/** @type {HTMLInputElement | null} */ (null))
 const status = ref('idle')    // idle | sending | sent | error
 const sendError = ref('')
 const showProblems = ref(false)
@@ -21,8 +21,9 @@ const problems = computed(() => ({
 }))
 const valid = computed(() => !problems.value.text && !problems.value.contact && !problems.value.file)
 
+/** @param {Event} e */
 function onFile (e) {
-  file.value = e.target.files?.[0] || null
+  file.value = /** @type {HTMLInputElement} */ (e.target).files?.[0] || null
 }
 
 async function send () {

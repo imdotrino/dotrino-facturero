@@ -2,12 +2,13 @@
 import { reactive } from 'vue'
 import { unlockSignature } from '../lib/signature.js'
 
-const prompt = reactive({ open: false, busy: false, error: '', issuerId: '', holder: '', resolve: null })
+const prompt = reactive({ open: false, busy: false, error: '', issuerId: '', holder: '', resolve: /** @type {((ok: boolean) => void) | null} */ (null) })
 
 /**
  * Pide la contraseña de la firma de UN emisor y la desbloquea. Resuelve `true` si se
  * desbloqueó y `false` si se canceló.
  * @param {{ issuerId: string, info: { holder: string } }} signature
+ * @returns {Promise<boolean>}
  */
 export function requestUnlock (signature) {
   return new Promise((resolve) => {
@@ -22,7 +23,7 @@ import { useBackLayer } from '@dotrino/nav/vue'
 import { t, errorText } from '../i18n.js'
 
 const password = ref('')
-const input = ref(null)
+const input = ref(/** @type {HTMLInputElement | null} */ (null))
 const open = ref(false)
 useBackLayer(open)
 
@@ -32,6 +33,7 @@ watch(() => prompt.open, (v) => {
 })
 watch(open, (v) => { if (!v && prompt.open) finish(false) })
 
+/** @param {boolean} ok */
 function finish (ok) {
   password.value = ''
   prompt.open = false

@@ -9,16 +9,25 @@ import { buyerProblems, normalizeBuyer } from '../lib/buyers.js'
 import { productProblems, normalizeProduct } from '../lib/products.js'
 import { VAT_RATES } from '../sri/catalog.js'
 import { splitEmails, joinEmails } from '../sri/invoice.js'
+import { codeError } from '../lib/errors.js'
 
-const fold = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+/** @typedef {import('../types').Buyer} Buyer */
+/** @typedef {import('../types').Product} Product */
+/** @typedef {import('../types').Problem} Problem */
+/** Una prueba sobre el encabezado ya normalizado; `required` si la columna tiene que estar. @typedef {((cell: string) => boolean) & { required?: boolean }} ColumnTest */
+
+const fold = (/** @type {unknown} */ s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 /**
  * Busca la fila de encabezados: la primera que contiene todas las columnas requeridas.
+ * @param {string[][]} rows
+ * @param {Record<string, ColumnTest>} columns
  * @returns {{ headerRow: number, col: Record<string, number> }}
  */
 function locate (rows, columns) {
   for (let r = 0; r < Math.min(rows.length, 30); r++) {
     const cells = rows[r].map(fold)
+    /** @type {Record<string, number>} */
     const col = {}
     for (const [name, test] of Object.entries(columns)) {
       const i = cells.findIndex(test)
@@ -27,16 +36,17 @@ function locate (rows, columns) {
     const required = Object.entries(columns).filter(([, t]) => t.required).map(([n]) => n)
     if (required.every((n) => n in col)) return { headerRow: r, col }
   }
-  const e = new Error('the file does not have the expected columns')
-  e.code = 'import-wrong-report'
-  throw e
+  throw codeError('import-wrong-report', 'the file does not have the expected columns')
 }
 
-const is = (...names) => Object.assign((c) => names.includes(c), { required: true })
-const optional = (...names) => (c) => names.includes(c)
+/** @returns {ColumnTest} */
+const is = (/** @type {string[]} */ ...names) => Object.assign((/** @type {string} */ c) => names.includes(c), { required: true })
+/** @returns {ColumnTest} */
+const optional = (/** @type {string[]} */ ...names) => (/** @type {string} */ c) => names.includes(c)
 
 // ---------- clientes ----------
 
+/** @type {Record<string, string>} */
 const ID_TYPES = {
   ruc: '04',
   cedula: '05',
@@ -47,8 +57,8 @@ const ID_TYPES = {
 
 /**
  * @param {string[][]} rows
- * @param {object[]} registered compradores ya guardados
- * @returns {{ items: Array<{ row: number, buyer: object, status: 'new'|'exists'|'invalid', problems: object[], notes: object[] }> }}
+ * @param {Buyer[]} registered compradores ya guardados
+ * @returns {{ items: import('../types').ImportedBuyer[] }}
  *   `notes`: lo que se cambió para que la fila entre (hoy, correos que no valen y se dejan fuera).
  */
 export function importBuyers (rows, registered) {
@@ -60,10 +70,12 @@ export function importBuyers (rows, registered) {
     phone: optional('telefonos', 'telefono'),
     email: optional('email', 'correo', 'correo electronico'),
   })
+  /** @type {import('../types').ImportedBuyer[]} */
   const items = []
+  /** @type {Buyer[]} */
   const seen = []
   for (let r = headerRow + 1; r < rows.length; r++) {
-    const cell = (k) => (col[k] === undefined ? '' : String(rows[r][col[k]] ?? '').trim())
+    const cell = (/** @type {string} */ k) => (col[k] === undefined ? '' : String(rows[r][col[k]] ?? '').trim())
     if (!cell('name') && !cell('id')) continue
     const typeCode = ID_TYPES[fold(cell('idType'))]
     // Un correo que no vale NO deja fuera al cliente (el correo es opcional): se quitan los que
@@ -83,7 +95,7 @@ export function importBuyers (rows, registered) {
       items.push({ row: r + 1, buyer, status: 'skip', problems: [{ path: 'buyer.idType', code: 'import-final-consumer' }], notes: [] })
       continue
     }
-    const same = (b) => b.idType === buyer.idType && b.id === buyer.id
+    const same = (/** @type {Buyer} */ b) => b.idType === buyer.idType && b.id === buyer.id
     if (registered.some(same)) {
       items.push({ row: r + 1, buyer, status: 'exists', problems: [], notes: [] })
       continue
@@ -100,24 +112,32 @@ export function importBuyers (rows, registered) {
 
 // ---------- bienes y servicios ----------
 
+/** @type {Record<string, string>} */
 const VAT_BY_TEXT = { '15': '4', '5': '5', '0': '0', '13': '10', '8': '8', 'no objeto de iva': '6', 'no objeto': '6', exento: '7', 'exento de iva': '7' }
 
+/**
+ * @param {string[][]} rows
+ * @param {Product[]} registered productos ya guardados
+ * @returns {{ items: import('../types').ImportedProduct[] }}
+ */
 export function importProducts (rows, registered) {
   const { headerRow, col } = locate(rows, {
     code: is('cod principal', 'codigo principal', 'codigo'),
     auxCode: optional('cod auxiliar', 'codigo auxiliar'),
     // «Descipcion», con la errata tal como la exporta Facturero Móvil.
-    description: Object.assign((c) => /^desc/.test(c), { required: true }),
+    description: Object.assign((/** @type {string} */ c) => /^desc/.test(c), { required: true }),
     price: is('valor', 'precio', 'valor unitario', 'precio unitario'),
     unit: optional('unid medida', 'unidad de medida', 'unidad'),
     vat: is('tarifa iva'),
     ice: optional('tarifa ice'),
     status: optional('estado'),
   })
+  /** @type {import('../types').ImportedProduct[]} */
   const items = []
+  /** @type {Product[]} */
   const seen = []
   for (let r = headerRow + 1; r < rows.length; r++) {
-    const cell = (k) => (col[k] === undefined ? '' : String(rows[r][col[k]] ?? '').trim())
+    const cell = (/** @type {string} */ k) => (col[k] === undefined ? '' : String(rows[r][col[k]] ?? '').trim())
     if (!cell('code') && !cell('description')) continue
     const vatKey = fold(cell('vat')).replace(/\s*$/, '')
     const vatCode = VAT_BY_TEXT[vatKey]
@@ -129,6 +149,7 @@ export function importProducts (rows, registered) {
       unitPrice: cell('price').replace(/,/g, ''),
       vatCode: vatCode || '',
     })
+    /** @type {Problem[]} */
     const pre = []
     if (!vatCode) pre.push({ path: 'product.vatCode', code: VAT_RATES.some((v) => v.historic && fold(v.rate) === vatKey) ? 'import-historic-vat' : 'import-unknown-vat' })
     if (cell('ice')) pre.push({ path: 'product.ice', code: 'import-ice' })
@@ -136,7 +157,7 @@ export function importProducts (rows, registered) {
       items.push({ row: r + 1, product, status: 'skip', problems: [{ path: 'product.status', code: 'import-inactive' }] })
       continue
     }
-    const same = (p) => p.code === product.code
+    const same = (/** @type {Product} */ p) => p.code === product.code
     if (registered.some(same)) {
       items.push({ row: r + 1, product, status: 'exists', problems: [] })
       continue

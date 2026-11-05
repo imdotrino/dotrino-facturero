@@ -1,4 +1,5 @@
 <script setup>
+/** @import { PropType } from 'vue' */
 import { ref, reactive, computed } from 'vue'
 import { t, errorText } from '../i18n.js'
 import { toast } from '../state.js'
@@ -7,8 +8,8 @@ import { EMPTY_PRODUCT, productProblems, normalizeProduct } from '../lib/product
 import { VAT_RATES } from '../sri/catalog.js'
 
 const props = defineProps({
-  product: { type: Object, default: null },   // null = nuevo
-  products: { type: Array, required: true },
+  product: { type: /** @type {PropType<import('../types').Product | null>} */ (Object), default: null },   // null = nuevo
+  products: { type: /** @type {PropType<import('../types').StoredProduct[]>} */ (Array), required: true },
 })
 const emit = defineEmits(['saved', 'cancel'])
 
@@ -18,7 +19,7 @@ const showProblems = ref(false)
 const vatOptions = VAT_RATES.filter((v) => !v.historic)
 
 const problems = computed(() => productProblems(form, props.products))
-const problemAt = (field) => {
+const problemAt = (/** @type {string} */ field) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === `product.${field}`)
   return p ? t(`problems.${p.code}`) : ''

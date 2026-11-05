@@ -7,14 +7,23 @@ import { draftFromInvoice } from '../lib/drafts.js'
 import { submitInvoice, checkAuthorization } from '../lib/emit.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
 import { money, sriDateTime } from '../lib/format.js'
-import { VAT_RATES } from '../sri/catalog.js'
+import { vatRate } from '../sri/catalog.js'
 import { issuerName } from '../lib/issuers.js'
 import RidePrint from './RidePrint.vue'
 
-const props = defineProps({ invoiceRef: { type: Object, required: true } })
+/** @import { PropType } from 'vue' */
+/** @typedef {import('../types').Invoice} Invoice */
+
+const props = defineProps({ invoiceRef: { type: /** @type {PropType<{ day: string, accessKey: string }>} */ (Object), required: true } })
 const emit = defineEmits(['close', 'correct', 'copied'])
 
-const invoice = ref(null)
+const invoice = ref(/** @type {Invoice | null} */ (null))
+
+/** La factura ya cargada; las acciones solo se ofrecen con ella en pantalla. */
+function current () {
+  if (!invoice.value) throw new Error('facturero: no invoice loaded')
+  return invoice.value
+}
 const loading = ref(true)
 const busy = ref(false)
 const printing = ref(false)
@@ -23,11 +32,11 @@ const canShareFiles = typeof navigator !== 'undefined' && typeof navigator.canSh
   navigator.canShare({ files: [new File(['x'], 'x.xml', { type: 'application/xml' })] })
 
 const authorized = computed(() => invoice.value?.status === 'authorized')
-const correctable = computed(() => ['returned', 'rejected', 'signed'].includes(invoice.value?.status))
-const resendable = computed(() => ['signed', 'returned', 'rejected'].includes(invoice.value?.status))
+const correctable = computed(() => ['returned', 'rejected', 'signed'].includes(invoice.value?.status ?? ''))
+const resendable = computed(() => ['signed', 'returned', 'rejected'].includes(invoice.value?.status ?? ''))
 const checkable = computed(() => invoice.value?.status === 'received')
-const buyerName = computed(() => invoice.value.draft.buyer.idType === '07' ? 'CONSUMIDOR FINAL' : invoice.value.draft.buyer.name)
-const vatLabel = (code) => t(`vat.${VAT_RATES.find((v) => v.code === code).key}`)
+const buyerName = computed(() => current().draft.buyer.idType === '07' ? 'CONSUMIDOR FINAL' : current().draft.buyer.name)
+const vatLabel = (/** @type {string} */ code) => t(`vat.${vatRate(code).key}`)
 
 async function load () {
   loading.value = true
@@ -41,11 +50,13 @@ async function load () {
   }
 }
 
+/** @param {(inv: Invoice) => Promise<Invoice>} fn */
 async function run (fn) {
   busy.value = true
   try {
-    invoice.value = await fn(invoice.value)
-    if (invoice.value.lastError) toast(errorText(invoice.value.lastError), 'error')
+    const next = await fn(current())
+    invoice.value = next
+    if (next.lastError) toast(errorText(next.lastError), 'error')
   } catch (e) {
     console.error('[facturero] detail action:', e)
     toast(errorText(e), 'error')
@@ -58,11 +69,13 @@ const check = () => run((inv) => checkAuthorization(inv))
 const resend = () => run((inv) => submitInvoice(inv))
 
 function fileBase () {
-  return `${invoice.value.number}_${invoice.value.accessKey}`
+  return `${current().number}_${current().accessKey}`
 }
 
 async function authorizedFile () {
-  return new File([await gunzipText(invoice.value.authorizedXmlGz)], `${fileBase()}.xml`, { type: 'application/xml' })
+  const gz = current().authorizedXmlGz
+  if (!gz) throw new Error(`invoice ${current().accessKey} has no authorized XML`)
+  return new File([await gunzipText(gz)], `${fileBase()}.xml`, { type: 'application/xml' })
 }
 
 async function download () {
@@ -78,9 +91,9 @@ async function download () {
 async function share () {
   try {
     const file = await authorizedFile()
-    await navigator.share({ files: [file], title: `Factura ${invoice.value.number}` })
+    await navigator.share({ files: [file], title: `Factura ${current().number}` })
   } catch (e) {
-    if (e?.name === 'AbortError') return
+    if (e && typeof e === 'object' && 'name' in e && e.name === 'AbortError') return
     console.error('[facturero] share:', e)
     toast(errorText(e), 'error')
   }
@@ -90,7 +103,7 @@ async function share () {
 async function copyAsNew () {
   busy.value = true
   try {
-    await openInForm(draftFromInvoice(invoice.value, state.buyers))
+    await openInForm(draftFromInvoice(current(), state.buyers))
     await refreshDrafts()
     emit('copied')
   } catch (e) {

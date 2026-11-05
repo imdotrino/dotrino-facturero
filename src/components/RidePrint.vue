@@ -10,11 +10,18 @@ import { code128Svg } from '../lib/code128.js'
 import { sriDateTime } from '../lib/format.js'
 import { VAT_RATES, RIMPE_LEGENDS, PAYMENT_METHODS } from '../sri/catalog.js'
 
-const props = defineProps({ invoice: { type: Object, required: true } })
+/** @import { PropType } from 'vue' */
+const props = defineProps({ invoice: { type: /** @type {PropType<import('../types').Invoice>} */ (Object), required: true } })
 const emit = defineEmits(['done'])
 
 const inv = computed(() => props.invoice)
 const issuer = computed(() => inv.value.issuer)
+// Un RIDE sin autorización no vale: si la factura no la trae, se para.
+const authorization = computed(() => {
+  const a = inv.value.authorization
+  if (!a) throw new Error(`RIDE of invoice ${inv.value.accessKey} without authorization`)
+  return a
+})
 // El logo es el que el emisor tiene HOY: la factura no guarda una copia (pesaría en cada una).
 // Si el emisor ya no existe, el RIDE sale sin logo.
 const logo = computed(() => state.logos.find((l) => l.issuerId === inv.value.issuerId) || null)
@@ -23,7 +30,9 @@ const finalConsumer = computed(() => buyer.value.idType === '07')
 const barcode = computed(() => code128Svg(inv.value.accessKey, { height: 50 }))
 
 // El RIDE va en español: es un documento tributario ecuatoriano.
+/** @type {Record<string, string>} */
 const VAT_ES = { 4: '15%', 5: '5%', 0: '0%', 6: 'NO OBJETO DE IVA', 7: 'EXENTO DE IVA', 10: '13%', 8: '8%', 2: '12%', 3: '14%' }
+/** @type {Record<string, string>} */
 const PAY_ES = { '01': 'SIN UTILIZACIÓN DEL SISTEMA FINANCIERO', 15: 'COMPENSACIÓN DE DEUDAS', 16: 'TARJETA DE DÉBITO', 17: 'DINERO ELECTRÓNICO', 18: 'TARJETA PREPAGO', 19: 'TARJETA DE CRÉDITO', 20: 'OTROS CON UTILIZACIÓN DEL SISTEMA FINANCIERO', 21: 'ENDOSO DE TÍTULOS' }
 const payment = computed(() => {
   const code = inv.value.draft.payments[0].method
@@ -78,8 +87,8 @@ onBeforeUnmount(() => {
             <p class="ride-title">{{ t('ride.invoice') }}</p>
             <p><strong>{{ t('ride.no') }}</strong> {{ inv.number }}</p>
             <p><strong>{{ t('ride.authNumber') }}</strong></p>
-            <p class="mono">{{ inv.authorization.number }}</p>
-            <p><strong>{{ t('ride.authDate') }}:</strong> {{ sriDateTime(inv.authorization.date) }}</p>
+            <p class="mono">{{ authorization.number }}</p>
+            <p><strong>{{ t('ride.authDate') }}:</strong> {{ sriDateTime(authorization.date) }}</p>
             <p><strong>{{ t('ride.environment') }}:</strong> {{ inv.environment === '2' ? 'PRODUCCIÓN' : 'PRUEBAS' }}</p>
             <p><strong>{{ t('ride.emission') }}:</strong> {{ t('ride.normal') }}</p>
             <p><strong>{{ t('ride.accessKey') }}</strong></p>

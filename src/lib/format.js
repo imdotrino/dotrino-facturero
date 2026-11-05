@@ -1,10 +1,12 @@
 // Formato de importes para la pantalla. Los importes viajan como texto con punto
 // decimal ('30.35'); aquí solo se presentan.
+/** @param {string} value */
 export function money (value) {
   return `$ ${value}`
 }
 
 /** Fecha y hora del SRI ('2026-09-16T08:10:11-05:00') en hora de Ecuador: 16/09/2026 08:10:11 */
+/** @param {string} iso */
 export function sriDateTime (iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) throw new Error(`not a date from the SRI: ${iso}`)

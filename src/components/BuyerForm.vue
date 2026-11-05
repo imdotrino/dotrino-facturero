@@ -1,4 +1,5 @@
 <script setup>
+/** @import { PropType } from 'vue' */
 import { ref, reactive, computed } from 'vue'
 import { t, errorText } from '../i18n.js'
 import { toast } from '../state.js'
@@ -7,8 +8,8 @@ import { EMPTY_BUYER, REGISTRABLE_ID_TYPES, buyerProblems, normalizeBuyer } from
 import { BUYER_ID_TYPES } from '../sri/catalog.js'
 
 const props = defineProps({
-  buyer: { type: Object, default: null },   // null = nuevo
-  buyers: { type: Array, required: true },
+  buyer: { type: /** @type {PropType<import('../types').Buyer | null>} */ (Object), default: null },   // null = nuevo
+  buyers: { type: /** @type {PropType<import('../types').StoredBuyer[]>} */ (Array), required: true },
 })
 const emit = defineEmits(['saved', 'cancel'])
 
@@ -18,7 +19,7 @@ const showProblems = ref(false)
 const idTypes = BUYER_ID_TYPES.filter((it) => REGISTRABLE_ID_TYPES.includes(it.code))
 
 const problems = computed(() => buyerProblems(form, props.buyers))
-const problemAt = (field) => {
+const problemAt = (/** @type {string} */ field) => {
   if (!showProblems.value) return ''
   const p = problems.value.find((x) => x.path === `buyer.${field}`)
   return p ? t(`problems.${p.code}`) : ''

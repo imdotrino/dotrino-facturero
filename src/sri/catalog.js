@@ -48,14 +48,26 @@ export const PAYMENT_METHODS = Object.freeze([
 ])
 
 /** Anexo 22: leyendas RIMPE. */
+/** @type {Readonly<Record<string, string>>} */
 export const RIMPE_LEGENDS = Object.freeze({
   entrepreneur: 'CONTRIBUYENTE RÉGIMEN RIMPE',
   popular: 'CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE',
 })
 
+/** @param {string} code */
 export function vatRate (code) {
   const r = VAT_RATES.find((v) => v.code === code)
   if (!r) throw codeError('unknown-vat-code', `unknown VAT percentage code: ${code}`)
   return r
+}
+
+/**
+ * El tipo de identificación de un código de la tabla 6.
+ * @param {string} code
+ */
+export function buyerIdType (code) {
+  const it = BUYER_ID_TYPES.find((x) => x.code === code)
+  if (!it) throw codeError('unknown-id-type', `unknown buyer identification type: ${code}`)
+  return it
 }
 

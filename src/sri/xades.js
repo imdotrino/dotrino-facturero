@@ -23,16 +23,7 @@ const SIGNED_PROPERTIES_TYPE = 'http://uri.etsi.org/01903#SignedProperties'
 const DS_DECL = ` xmlns:ds="${NS_DS}"`
 const DS_XADES_DECL = ` xmlns:ds="${NS_DS}" xmlns:xades="${NS_XADES}"`
 
-/**
- * @typedef {object} Signer
- * @property {CryptoKey} privateKey   RSASSA-PKCS1-v1_5 con SHA-1, no extraíble
- * @property {string} certificate     DER del certificado en base64
- * @property {string} certificateSha1 SHA-1 del DER en base64
- * @property {string} issuerName      emisor del certificado en RFC 2253
- * @property {string} serialNumber    número de serie en decimal
- * @property {string} modulus         módulo RSA en base64 (big-endian, sin cero inicial)
- * @property {string} exponent        exponente RSA en base64
- */
+/** @typedef {import('../types').Signer} Signer */
 
 /**
  * Firma un comprobante. `rootXml` es el elemento raíz canónico (sin declaración XML) y
@@ -61,7 +52,7 @@ export async function signDocument (rootXml, signer, { rootName = 'factura', now
     object: `SignatureObject-${uuid()}`,
   }
 
-  const keyInfo = (ns) =>
+  const keyInfo = (/** @type {string} */ ns) =>
     `<ds:KeyInfo${ns} Id="${ids.certificate}">` +
     '<ds:X509Data>' +
     `<ds:X509Certificate>${signer.certificate}</ds:X509Certificate>` +
@@ -72,7 +63,7 @@ export async function signDocument (rootXml, signer, { rootName = 'factura', now
     '</ds:RSAKeyValue></ds:KeyValue>' +
     '</ds:KeyInfo>'
 
-  const signedProperties = (ns) =>
+  const signedProperties = (/** @type {string} */ ns) =>
     `<xades:SignedProperties${ns} Id="${ids.signedProperties}">` +
     '<xades:SignedSignatureProperties>' +
     `<xades:SigningTime>${signingTime(now)}</xades:SigningTime>` +
@@ -100,7 +91,7 @@ export async function signDocument (rootXml, signer, { rootName = 'factura', now
   const signedPropertiesDigest = await sha1Base64(signedProperties(DS_XADES_DECL))
   const keyInfoDigest = await sha1Base64(keyInfo(DS_DECL))
 
-  const signedInfo = (ns) =>
+  const signedInfo = (/** @type {string} */ ns) =>
     `<ds:SignedInfo${ns} Id="${ids.signedInfo}">` +
     `<ds:CanonicalizationMethod Algorithm="${C14N}"></ds:CanonicalizationMethod>` +
     `<ds:SignatureMethod Algorithm="${RSA_SHA1}"></ds:SignatureMethod>` +
@@ -137,8 +128,9 @@ export async function signDocument (rootXml, signer, { rootName = 'factura', now
 }
 
 /** Hora de firma con el desfase local del aparato: 2026-09-16T10:20:30.123-05:00 */
+/** @param {Date} d */
 export function signingTime (d) {
-  const pad = (n, w = 2) => String(n).padStart(w, '0')
+  const pad = (/** @type {number} */ n, w = 2) => String(n).padStart(w, '0')
   const offset = -d.getTimezoneOffset()
   const sign = offset >= 0 ? '+' : '-'
   const abs = Math.abs(offset)
@@ -146,11 +138,16 @@ export function signingTime (d) {
     `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
 }
 
+/** @param {string} text */
 async function sha1Base64 (text) {
   const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text))
   return bytesToBase64(new Uint8Array(digest))
 }
 
+/**
+ * @param {CryptoKey} key
+ * @param {string} text
+ */
 async function rsaSha1Base64 (key, text) {
   const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, key, new TextEncoder().encode(text))
   return bytesToBase64(new Uint8Array(sig))

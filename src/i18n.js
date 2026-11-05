@@ -1,7 +1,11 @@
 // Textos es/en. Español neutro, con tuteo. El idioma lo decide el toggle de
 // <dotrino-topbar> (clave común 'dotrino.lang'); aquí solo se sigue su evento.
 import { ref } from 'vue'
+import { codeOf, messageOf } from './lib/errors.js'
 
+/** @typedef {import('./types').MessageTree} MessageTree */
+
+/** @type {{ es: MessageTree, en: MessageTree }} */
 const messages = {
   es: {
     tabs: { invoices: 'Facturas', new: 'Nueva factura', buyers: 'Compradores', products: 'Productos', import: 'Importar', settings: 'Ajustes' },
@@ -717,6 +721,7 @@ messages.en.ride = messages.es.ride
 
 export const lang = ref(initialLang())
 
+/** @returns {'es' | 'en'} */
 function initialLang () {
   try {
     const saved = localStorage.getItem('dotrino.lang')
@@ -726,29 +731,53 @@ function initialLang () {
 }
 
 /** Una fecha en el idioma activo (es-EC / en-US). `opts` son los de Intl.DateTimeFormat. */
+/**
+ * @param {string | number | Date} value
+ * @param {Intl.DateTimeFormatOptions} [opts]
+ */
 export function formatDate (value, opts) {
   return new Intl.DateTimeFormat(lang.value === 'es' ? 'es-EC' : 'en-US', opts).format(new Date(value))
 }
 
+/** @param {string} l */
 export function setLang (l) {
   if (l !== 'es' && l !== 'en') throw new Error(`unsupported language: ${l}`)
   lang.value = l
 }
 
+/**
+ * El valor de una clave con puntos (`'form.quantity'`): texto, rama, o `undefined`/`null`.
+ * @param {string} path
+ * @returns {string | MessageTree | null | undefined}
+ */
+function lookup (path) {
+  /** @type {string | MessageTree | null | undefined} */
+  let o = messages[lang.value]
+  for (const k of path.split('.')) o = o == null ? o : typeof o === 'string' ? undefined : o[k]
+  return o
+}
+
+/**
+ * @param {string} path
+ * @param {Record<string, unknown>} [vars]
+ */
 export function t (path, vars) {
-  const value = path.split('.').reduce((o, k) => (o == null ? o : o[k]), messages[lang.value])
+  const value = lookup(path)
   if (typeof value !== 'string') throw new Error(`missing translation: ${lang.value}.${path}`)
   return vars ? value.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`)) : value
 }
 
 /** ¿Hay texto para esta clave? Para códigos que vienen de fuera y pueden ser nuevos. */
+/** @param {string} path */
 export function hasText (path) {
-  return typeof path.split('.').reduce((o, k) => (o == null ? o : o[k]), messages[lang.value]) === 'string'
+  return typeof lookup(path) === 'string'
 }
 
 /** Mensaje para un error con `code`; los desconocidos dicen lo que pasó, tal cual. */
+/** @param {unknown} e */
 export function errorText (e) {
-  const code = e?.code
-  const known = code && messages[lang.value].errors[code]
-  return known || t('errors.unknown', { message: e?.message || String(e) })
+  const code = codeOf(e)
+  const errors = messages[lang.value].errors
+  const known = code && errors && typeof errors === 'object' ? errors[code] : undefined
+  return typeof known === 'string' && known ? known : t('errors.unknown', { message: messageOf(e) })
 }

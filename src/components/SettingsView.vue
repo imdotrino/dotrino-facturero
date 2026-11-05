@@ -10,27 +10,33 @@ import IssuerForm from './IssuerForm.vue'
 import BackupCard from './BackupCard.vue'
 
 // Una sola edición abierta a la vez: el id del emisor, 'new', o null.
-const editing = ref(null)
-const formIssuer = ref(null)    // el emisor que se edita, o los datos de la copia
-const copyFrom = ref(null)      // el original, si es una copia
-const toRemove = ref(null)
+/** @typedef {import('../types').Issuer} Issuer */
+const editing = ref(/** @type {string | null} */ (null))
+const formIssuer = ref(/** @type {(import('../types').IssuerData & { id?: string }) | null} */ (null))    // el emisor que se edita, o los datos de la copia
+const copyFrom = ref(/** @type {Issuer | null} */ (null))      // el original, si es una copia
+const toRemove = ref(/** @type {Issuer | null} */ (null))
 const info = ref(false)
 
-const fmtDate = (iso) => formatDate(iso, { dateStyle: 'long' })
-const signatureOf = (issuer) => state.signatures.find((s) => s.issuerId === issuer.id) || null
-const logoOf = (issuer) => state.logos.find((l) => l.issuerId === issuer.id) || null
-const problemsOf = (issuer) => issuerProblems(issuer, { issuers: state.issuers, signatures: state.signatures })
+const fmtDate = (/** @type {string} */ iso) => formatDate(iso, { dateStyle: 'long' })
+const signatureOf = (/** @type {Issuer} */ issuer) => state.signatures.find((s) => s.issuerId === issuer.id) || null
+const logoOf = (/** @type {Issuer} */ issuer) => state.logos.find((l) => l.issuerId === issuer.id) || null
+const problemsOf = (/** @type {Issuer} */ issuer) => issuerProblems(issuer, { issuers: state.issuers, signatures: state.signatures })
 const sortedIssuers = computed(() => [...state.issuers].sort((a, b) =>
   issuerName(a).localeCompare(issuerName(b)) || a.environment.localeCompare(b.environment)))
+// Cada emisor con su firma y su logo, para que la plantilla los lea una vez.
+const issuerRows = computed(() => sortedIssuers.value.map((issuer) => ({ issuer, sig: signatureOf(issuer), logo: logoOf(issuer) })))
 
+/** @param {Issuer} issuer */
 function edit (issuer) {
   formIssuer.value = issuer
   copyFrom.value = null
   editing.value = issuer.id
 }
 
+/** @param {Issuer} issuer */
 function duplicate (issuer) {
   const { id, ...copy } = issuer
+  // Sin id: IssuerForm la guarda como un emisor nuevo.
   formIssuer.value = { ...copy, nextSequential: 1 }
   copyFrom.value = issuer
   editing.value = 'new'
@@ -57,6 +63,7 @@ async function onSaved () {
 async function confirmRemove () {
   const issuer = toRemove.value
   toRemove.value = null
+  if (!issuer) return
   try {
     await removeIssuer(issuer.id)
     forgetSigner(issuer.id)
@@ -80,7 +87,7 @@ async function confirmRemove () {
       <p v-if="state.issuers.length === 0 && editing !== 'new'" class="muted" data-testid="no-issuers">{{ t('settings.noIssuers') }}</p>
 
       <ul class="plain-list">
-        <li v-for="issuer in sortedIssuers" :key="issuer.id" class="sub-card" :data-issuer-id="issuer.id" data-testid="issuer-item">
+        <li v-for="{ issuer, sig, logo } in issuerRows" :key="issuer.id" class="sub-card" :data-issuer-id="issuer.id" data-testid="issuer-item">
           <IssuerForm
             v-if="editing === issuer.id"
             :issuer="formIssuer" :issuers="state.issuers" :signatures="state.signatures" :logos="state.logos"
@@ -89,31 +96,31 @@ async function confirmRemove () {
           <template v-else>
             <div class="row between">
               <span class="row">
-                <img v-if="logoOf(issuer)" :src="logoOf(issuer).dataUrl" alt="" class="logo-thumb" data-testid="issuer-logo-thumb" />
+                <img v-if="logo" :src="logo.dataUrl" alt="" class="logo-thumb" data-testid="issuer-logo-thumb" />
                 <strong>{{ issuerName(issuer) }}</strong>
               </span>
               <span class="chip" :class="issuer.environment === '2' ? 'authorized' : 'test'">{{ issuer.environment === '2' ? t('settings.envProd') : t('settings.envTest') }}</span>
             </div>
             <p class="muted small">RUC {{ issuer.ruc }} · {{ t('settings.nextInvoice') }} {{ nextNumber(issuer) }}</p>
 
-            <div v-if="signatureOf(issuer)" class="row between" data-testid="issuer-signature-summary">
+            <div v-if="sig" class="row between" data-testid="issuer-signature-summary">
               <span class="small">
-                {{ t('settings.signature') }}: <strong>{{ signatureOf(issuer).info.holder }}</strong>
-                · {{ t('settings.validTo') }} {{ fmtDate(signatureOf(issuer).info.validTo) }}
+                {{ t('settings.signature') }}: <strong>{{ sig.info.holder }}</strong>
+                · {{ t('settings.validTo') }} {{ fmtDate(sig.info.validTo) }}
               </span>
-              <span class="chip" :class="signatureOf(issuer).unlocked ? 'authorized' : 'signed'" data-testid="signature-state">
-                {{ signatureOf(issuer).unlocked ? t('settings.unlocked') : t('settings.locked') }}
+              <span class="chip" :class="sig.unlocked ? 'authorized' : 'signed'" data-testid="signature-state">
+                {{ sig.unlocked ? t('settings.unlocked') : t('settings.locked') }}
               </span>
             </div>
-            <p v-if="signatureOf(issuer)?.info.ruc && signatureOf(issuer).info.ruc !== issuer.ruc" class="banner warn">{{ t('settings.rucDiffers') }}</p>
+            <p v-if="sig?.info.ruc && sig.info.ruc !== issuer.ruc" class="banner warn">{{ t('settings.rucDiffers') }}</p>
 
             <ul v-if="problemsOf(issuer).length" class="problems" data-testid="issuer-problems">
               <li v-for="p in problemsOf(issuer)" :key="p.path + p.code" class="problem">{{ t(`settings.fields.${p.path.replace('issuer.', '')}`) }}: {{ t(`problems.${p.code}`) }}</li>
             </ul>
 
             <div class="actions wrap">
-              <button class="btn small" :disabled="!signatureOf(issuer) || signatureOf(issuer).unlocked" data-testid="unlock" @click="requestUnlock(signatureOf(issuer))">{{ t('settings.unlock') }}</button>
-              <button class="btn small" :disabled="!signatureOf(issuer)?.unlocked" data-testid="lock" @click="lock(issuer.id)">{{ t('settings.lock') }}</button>
+              <button class="btn small" :disabled="!sig || sig.unlocked" data-testid="unlock" @click="sig && requestUnlock(sig)">{{ t('settings.unlock') }}</button>
+              <button class="btn small" :disabled="!sig?.unlocked" data-testid="lock" @click="lock(issuer.id)">{{ t('settings.lock') }}</button>
               <button class="btn small" :disabled="editing !== null" data-testid="edit-issuer" @click="edit(issuer)">✎ {{ t('settings.edit') }}</button>
               <button class="btn small" :disabled="editing !== null" data-testid="duplicate-issuer" @click="duplicate(issuer)">{{ t('settings.duplicate') }}</button>
               <button class="btn small danger" :disabled="editing !== null" data-testid="remove-issuer" @click="toRemove = issuer">✕ {{ t('settings.remove') }}</button>

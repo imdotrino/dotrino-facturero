@@ -9,9 +9,17 @@
 import { cleanText } from '../sri/invoice.js'
 import { parseDecimal, format } from '../sri/decimal.js'
 import { VAT_RATES, DEFAULT_VAT_CODE } from '../sri/catalog.js'
+import { codeOf } from './errors.js'
 
+/** @typedef {import('../types').Product} Product */
+
+/** @type {Readonly<Product>} */
 export const EMPTY_PRODUCT = Object.freeze({ code: '', auxCode: '', description: '', unit: '', unitPrice: '', vatCode: DEFAULT_VAT_CODE })
 
+/**
+ * @param {Product} p
+ * @returns {Product}
+ */
 export function normalizeProduct (p) {
   return {
     ...(p.key ? { key: p.key } : {}),
@@ -25,10 +33,17 @@ export function normalizeProduct (p) {
 }
 
 /** Lo que impide registrar un producto. `[{ path, code }]`. */
+/**
+ * @param {Product} product
+ * @param {Product[]} [products]
+ * @returns {import('../types').Problem[]}
+ */
 export function productProblems (product, products = []) {
   const p = normalizeProduct(product)
+  /** @type {import('../types').Problem[]} */
   const problems = []
-  const add = (path, code) => problems.push({ path, code })
+  /** @type {import('../types').AddProblem} */
+  const add = (path, code) => { problems.push({ path, code }) }
   if (!p.code) add('product.code', 'required')
   else if (p.code.length > 25) add('product.code', 'too-long')
   if (p.auxCode.length > 25) add('product.auxCode', 'too-long')
@@ -38,7 +53,7 @@ export function productProblems (product, products = []) {
   try {
     parseDecimal(p.unitPrice)
   } catch (e) {
-    if (e.code !== 'bad-decimal') throw e
+    if (codeOf(e) !== 'bad-decimal') throw e
     add('product.unitPrice', 'bad-number')
   }
   if (!VAT_RATES.some((v) => v.code === p.vatCode && !v.historic)) add('product.vatCode', 'required')
@@ -46,6 +61,12 @@ export function productProblems (product, products = []) {
   return problems
 }
 
+/**
+ * @template {Product} P
+ * @param {P[]} products
+ * @param {string} query
+ * @returns {P[]}
+ */
 export function searchProducts (products, query) {
   const q = cleanText(query).toLowerCase()
   return products
@@ -54,6 +75,10 @@ export function searchProducts (products, query) {
 }
 
 /** Lo que el producto pone en una línea de factura (cantidad y descuento no son suyos). */
+/**
+ * @param {Product} product
+ * @returns {Omit<import('../types').DraftLine, 'quantity' | 'discount'>}
+ */
 export function lineFromProduct (product) {
   return {
     productKey: product.key,

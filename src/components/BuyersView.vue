@@ -4,15 +4,15 @@ import { t, errorText } from '../i18n.js'
 import { state, refreshSettings, toast } from '../state.js'
 import { removeBuyer } from '../lib/repo.js'
 import { searchBuyers, FINAL_CONSUMER_KEY } from '../lib/buyers.js'
-import { BUYER_ID_TYPES } from '../sri/catalog.js'
+import { buyerIdType } from '../sri/catalog.js'
 import BuyerForm from './BuyerForm.vue'
 
 const query = ref('')
-const editing = ref(null)     // clave del comprador, 'new', o null
-const toRemove = ref(null)
+const editing = ref(/** @type {string | null} */ (null))     // clave del comprador, 'new', o null
+const toRemove = ref(/** @type {import('../types').StoredBuyer | null} */ (null))
 
 const shown = computed(() => searchBuyers(state.buyers, query.value))
-const idTypeLabel = (code) => t(`idTypes.${BUYER_ID_TYPES.find((it) => it.code === code).key}`)
+const idTypeLabel = (/** @type {string} */ code) => t(`idTypes.${buyerIdType(code).key}`)
 
 async function onSaved () {
   editing.value = null
@@ -23,6 +23,7 @@ async function onSaved () {
 async function confirmRemove () {
   const buyer = toRemove.value
   toRemove.value = null
+  if (!buyer) return
   try {
     await removeBuyer(buyer.key)
     await refreshSettings()

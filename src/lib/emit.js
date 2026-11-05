@@ -20,7 +20,14 @@ import { currentSigner } from './signature.js'
 import { issuerProblems } from './issuers.js'
 import { ecuadorToday } from './dates.js'
 import { gzipText, gunzipText } from './bytes.js'
-import { codeError } from './errors.js'
+import { codeError, codeOf } from './errors.js'
+
+/** @typedef {import('../types').Draft} Draft */
+/** @typedef {import('../types').DraftWithBuyer} DraftWithBuyer */
+/** @typedef {import('../types').Invoice} Invoice */
+/** @typedef {import('../types').Issuer} Issuer */
+/** @typedef {import('../types').Authorization} Authorization */
+/** @typedef {{ onProgress?: import('../types').OnProgress }} ProgressOpts */
 
 /** Esperas entre consultas de autorización tras una recepción, en ms. */
 export const AUTHORIZATION_WAITS = [2500, 4000, 8000]
@@ -31,6 +38,10 @@ const ALREADY_RECEIVED = new Set(['43', '70'])
 /**
  * El emisor con el que se va a firmar, leído del almacén en este momento (no de la
  * pantalla, que puede ir por detrás), con los problemas del emisor y del borrador juntos.
+ */
+/**
+ * @param {string} issuerId
+ * @param {DraftWithBuyer} draft
  */
 async function prepare (issuerId, draft) {
   if (!issuerId) throw codeError('invalid-draft', 'no issuer chosen', { problems: [{ path: 'issuerId', code: 'required' }] })
@@ -44,6 +55,7 @@ async function prepare (issuerId, draft) {
   return { issuer, problems }
 }
 
+/** @param {Issuer} issuer */
 function signerFor (issuer) {
   const signer = currentSigner(issuer.id)
   if (!signer) throw codeError('signature-locked', `the signature of issuer ${issuer.id} is locked`, { issuerId: issuer.id })
@@ -51,6 +63,10 @@ function signerFor (issuer) {
 }
 
 /** Emite con el emisor elegido en el borrador (`draft.issuerId`). */
+/**
+ * @param {DraftWithBuyer} draft
+ * @param {ProgressOpts} [opts]
+ */
 export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
   const { issuer, problems } = await prepare(draft.issuerId, draft)
   if (problems.length) throw codeError('invalid-draft', 'the invoice has problems', { problems })
@@ -71,6 +87,7 @@ export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
     sequential,
   })
 
+  /** @type {Invoice} */
   const invoice = {
     accessKey,
     day,
@@ -97,16 +114,22 @@ export async function emitInvoice (draft, { onProgress = () => {} } = {}) {
  * Corrige una factura DEVUELTA o NO AUTORIZADA: misma clave, mismo número, misma fecha y
  * mismo emisor (ficha técnica §5.10), con los datos del comprador y las líneas nuevos.
  */
+/**
+ * @param {Invoice} invoice
+ * @param {DraftWithBuyer} draft
+ * @param {ProgressOpts} [opts]
+ */
 export async function correctInvoice (invoice, draft, { onProgress = () => {} } = {}) {
   if (!['returned', 'rejected', 'signed'].includes(invoice.status)) throw codeError('not-correctable', `an invoice in state ${invoice.status} cannot be corrected`)
   const { issuer, problems } = await prepare(invoice.issuerId, { ...draft, issuerId: invoice.issuerId })
-  for (const k of ['ruc', 'establishment', 'emissionPoint', 'environment']) {
+  for (const k of /** @type {const} */ (['ruc', 'establishment', 'emissionPoint', 'environment'])) {
     if (issuer[k] !== invoice.issuer[k]) throw codeError('issuer-changed', `the issuer ${k} changed since this invoice was numbered`)
   }
   if (problems.length) throw codeError('invalid-draft', 'the invoice has problems', { problems })
   const signer = signerFor(issuer)
 
   onProgress('signing')
+  /** @type {Invoice} */
   const updated = {
     ...invoice,
     issuer,
@@ -123,8 +146,14 @@ export async function correctInvoice (invoice, draft, { onProgress = () => {} } 
 }
 
 /** Envía a recepción y, si la recibe, consulta la autorización. */
+/**
+ * @param {Invoice} invoice
+ * @param {ProgressOpts} [opts]
+ * @returns {Promise<Invoice>}
+ */
 export async function submitInvoice (invoice, { onProgress = () => {} } = {}) {
   onProgress('sending')
+  if (!invoice.signedXmlGz) throw codeError('bad-invoice', `invoice ${invoice.accessKey} has no signed XML`)
   const signedXml = await gunzipText(invoice.signedXmlGz)
   let reception
   try {
@@ -134,6 +163,7 @@ export async function submitInvoice (invoice, { onProgress = () => {} } = {}) {
   }
   const ids = reception.messages.map((m) => m.id)
   const received = reception.state === 'RECIBIDA' || ids.some((id) => ALREADY_RECEIVED.has(id))
+  /** @type {Invoice} */
   const next = {
     ...invoice,
     status: received ? 'received' : 'returned',
@@ -149,6 +179,11 @@ export async function submitInvoice (invoice, { onProgress = () => {} } = {}) {
 /**
  * Consulta la autorización. Con `waits`, espera y reintenta mientras el SRI no la tenga;
  * si se acaban las esperas, la factura queda «received» para consultarla más tarde.
+ */
+/**
+ * @param {Invoice} invoice
+ * @param {ProgressOpts & { waits?: number[] }} [opts]
+ * @returns {Promise<Invoice>}
  */
 export async function checkAuthorization (invoice, { waits = [0], onProgress = () => {} } = {}) {
   let current = invoice
@@ -197,6 +232,10 @@ export async function checkAuthorization (invoice, { waits = [0], onProgress = (
 }
 
 /** Si hay varias (se corrigió y reenvió), vale la autorizada; si no, la más reciente. */
+/**
+ * @param {Authorization[]} list
+ * @returns {Authorization | null}
+ */
 export function pickAuthorization (list) {
   if (!list.length) return null
   return list.find((a) => a.state === 'AUTORIZADO') ||
@@ -204,9 +243,10 @@ export function pickAuthorization (list) {
 }
 
 /** El XML que se conserva y se entrega al comprador: la autorización con el comprobante. */
+/** @param {Authorization} auth */
 export function authorizedXml (auth) {
   if (auth.document.includes(']]>')) throw codeError('sri-bad-response', 'the authorized document cannot be wrapped in CDATA')
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const esc = (/** @type {unknown} */ s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return '<?xml version="1.0" encoding="UTF-8"?>' +
     '<autorizacion>' +
     `<estado>${esc(auth.state)}</estado>` +
@@ -218,13 +258,21 @@ export function authorizedXml (auth) {
     '</autorizacion>'
 }
 
+/**
+ * @param {Invoice} invoice
+ * @param {unknown} e
+ * @returns {Promise<Invoice>}
+ */
 async function recordError (invoice, e) {
-  if (!e?.code || !/^sri-/.test(e.code)) throw e
-  const next = { ...invoice, lastError: { code: e.code, message: e.message, at: Date.now() } }
+  const code = codeOf(e)
+  if (!code || !/^sri-/.test(code)) throw e
+  /** @type {Invoice} */
+  const next = { ...invoice, lastError: { code, message: /** @type {Error} */ (e).message, at: Date.now() } }
   await saveInvoice(next)
   return next
 }
 
+/** @param {number} ms */
 function sleep (ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

@@ -10,12 +10,16 @@
 // cambian, el envío falla con `sri-unreachable` y se dice en pantalla: no hay un camino
 // alternativo escondido.
 
-import { codeError } from '../lib/errors.js'
+import { codeError, messageOf } from '../lib/errors.js'
+/** @typedef {import('../types').SriMessage} SriMessage */
+
+/** @type {Readonly<Record<string, string>>} */
 export const ENDPOINTS = Object.freeze({
   1: 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/',
   2: 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/',
 })
 
+/** @param {string} xmlBase64 */
 export function receptionEnvelope (xmlBase64) {
   return '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ec="http://ec.gob.sri.ws.recepcion">' +
     '<soapenv:Header/><soapenv:Body><ec:validarComprobante>' +
@@ -23,6 +27,7 @@ export function receptionEnvelope (xmlBase64) {
     '</ec:validarComprobante></soapenv:Body></soapenv:Envelope>'
 }
 
+/** @param {string} accessKey */
 export function authorizationEnvelope (accessKey) {
   if (!/^\d{49}$/.test(accessKey)) throw codeError('bad-access-key', `access key must be 49 digits, got «${accessKey}»`)
   return '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ec="http://ec.gob.sri.ws.autorizacion">' +
@@ -50,7 +55,9 @@ export function parseReception (text, Parser = globalThis.DOMParser) {
 }
 
 /**
- * @returns {{ found: number, authorizations: Array<{ state: string, number: string, date: string, environment: string, document: string, messages: SriMessage[] }> }}
+ * @param {string} text  respuesta SOAP
+ * @param {typeof DOMParser} [Parser]
+ * @returns {{ found: number, authorizations: import('../types').Authorization[] }}
  */
 export function parseAuthorization (text, Parser = globalThis.DOMParser) {
   const doc = parseSoap(text, Parser)
@@ -69,7 +76,8 @@ export function parseAuthorization (text, Parser = globalThis.DOMParser) {
 }
 
 /**
- * @typedef {{ id: string, message: string, info: string, type: string }} SriMessage
+ * @param {Element | null} node
+ * @returns {SriMessage[]}
  */
 function readMessages (node) {
   return children(child(node, 'mensajes'), 'mensaje').map((m) => ({
@@ -80,6 +88,11 @@ function readMessages (node) {
   }))
 }
 
+/**
+ * @param {string} text
+ * @param {typeof DOMParser | undefined} Parser
+ * @returns {Document}
+ */
 function parseSoap (text, Parser) {
   if (!Parser) throw codeError('no-xml-parser', 'no DOMParser available')
   let doc
@@ -96,26 +109,46 @@ function parseSoap (text, Parser) {
   return doc
 }
 
-const localName = (n) => n.localName || String(n.nodeName).replace(/^.*:/, '')
+const localName = (/** @type {Element} */ n) => n.localName || String(n.nodeName).replace(/^.*:/, '')
 
+/**
+ * @param {Element | null} node
+ * @returns {Element[]}
+ */
 function elementChildren (node) {
   if (!node) return []
-  return Array.from(node.childNodes || []).filter((n) => n.nodeType === 1)
+  return /** @type {Element[]} */ (Array.from(node.childNodes || []).filter((n) => n.nodeType === 1))
 }
 
+/**
+ * @param {Element | null} node
+ * @param {string} name
+ */
 function child (node, name) {
   return elementChildren(node).find((n) => localName(n) === name) || null
 }
 
+/**
+ * @param {Element | null} node
+ * @param {string} name
+ */
 function children (node, name) {
   return elementChildren(node).filter((n) => localName(n) === name)
 }
 
+/**
+ * @param {Element | null} node
+ * @param {string} name
+ */
 function childText (node, name) {
   const c = child(node, name)
   return c ? c.textContent.trim() : ''
 }
 
+/**
+ * @param {Document} doc
+ * @param {string} name
+ */
 function first (doc, name) {
   const all = doc.getElementsByTagName('*')
   for (let i = 0; i < all.length; i++) if (localName(all[i]) === name) return all[i]
@@ -124,8 +157,10 @@ function first (doc, name) {
 
 /**
  * Hace la llamada. `fetchImpl` se inyecta en las pruebas.
- * @param {'1'|'2'} environment
+ * @param {string} environment  '1' pruebas, '2' producción (se comprueba)
  * @param {'RecepcionComprobantesOffline'|'AutorizacionComprobantesOffline'} service
+ * @param {string} envelope
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [opts]
  */
 export async function callSri (environment, service, envelope, { fetchImpl = globalThis.fetch, signal } = {}) {
   const base = ENDPOINTS[environment]
@@ -139,8 +174,8 @@ export async function callSri (environment, service, envelope, { fetchImpl = glo
       signal,
     })
   } catch (e) {
-    if (e?.name === 'AbortError') throw e
-    throw codeError('sri-unreachable', `could not reach the SRI (${service}): ${e?.message || e}`, { cause: e })
+    if (e instanceof Error && e.name === 'AbortError') throw e
+    throw codeError('sri-unreachable', `could not reach the SRI (${service}): ${messageOf(e)}`, { cause: e })
   }
   const text = await res.text()
   // Un fallo SOAP llega con 500 y cuerpo XML: se deja pasar para leer su faultstring.

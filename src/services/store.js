@@ -7,9 +7,12 @@
 // con facturas de por medio mezclar dos negocios no es un fallo que se pueda notar tarde.
 import { Store } from '@dotrino/store'
 import { getIdentity } from './identity.js'
+import { codeError, codeOf, messageOf } from '../lib/errors.js'
 
+/** @type {Promise<import('@dotrino/store').Store> | null} */
 let connecting = null
 
+/** @returns {Promise<import('@dotrino/store').Store>} */
 export function getStore () {
   if (!connecting) {
     connecting = connect().catch((e) => {
@@ -32,16 +35,12 @@ async function connect () {
   } catch (e) {
     // «Sin perfil» u «otro perfil» no son «no contesta»: se arreglan distinto, y el
     // código no se pierde al envolver.
-    if (e?.code === 'store-no-profile' || e?.code === 'store-identity-mismatch') throw e
-    const err = new Error(`store unreachable: ${e?.message || e}`, { cause: e })
-    err.code = 'store-unreachable'
-    throw err
+    if (codeOf(e) === 'store-no-profile' || codeOf(e) === 'store-identity-mismatch') throw e
+    throw codeError('store-unreachable', `store unreachable: ${messageOf(e)}`, { cause: e })
   }
   const profile = await identity.currentProfile()
   if (!profile?.id || store.profileId !== profile.id) {
-    const err = new Error(`the store is not bound to the active profile (store: ${store.profileId}, profile: ${profile?.id})`)
-    err.code = 'store-profile-mismatch'
-    throw err
+    throw codeError('store-profile-mismatch', `the store is not bound to the active profile (store: ${store.profileId}, profile: ${profile?.id})`)
   }
   return store
 }

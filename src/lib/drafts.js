@@ -6,11 +6,16 @@
 
 import { FINAL_CONSUMER_KEY } from './buyers.js'
 
+/** @typedef {import('../types').Draft} Draft */
+
 /** Un borrador sin nada escrito: consumidor final y líneas vacías. Guardarlo no sirve de nada. */
+/** @param {Draft | null | undefined} draft */
 export function isBlankDraft (draft) {
   if (!draft) return true
   if (draft.buyerKey && draft.buyerKey !== FINAL_CONSUMER_KEY) return false
-  return (draft.lines || []).every((l) => !['code', 'auxCode', 'description', 'unitPrice', 'discount'].some((k) => String(l[k] ?? '').trim()))
+  /** @type {Array<keyof import('../types').DraftLine>} */
+  const written = ['code', 'auxCode', 'description', 'unitPrice', 'discount']
+  return (draft.lines || []).every((l) => !written.some((k) => String(l[k] ?? '').trim()))
 }
 
 /**
@@ -20,6 +25,11 @@ export function isBlankDraft (draft) {
  * El comprador se busca por su clave y, si ya no está (se borró o la factura es de antes de
  * guardarla), por su identificación. Si no aparece, queda sin elegir y el formulario lo pide:
  * caer en consumidor final sería facturarle a otro.
+ */
+/**
+ * @param {import('../types').Invoice} invoice
+ * @param {import('../types').Buyer[]} buyers
+ * @returns {Draft}
  */
 export function draftFromInvoice (invoice, buyers) {
   const d = invoice.draft
@@ -38,6 +48,10 @@ export function draftFromInvoice (invoice, buyers) {
 }
 
 /** Lo que se guarda: el borrador sin el marcador de a qué guardado pertenece. */
+/**
+ * @param {Draft} draft
+ * @returns {Draft}
+ */
 export function toSaved (draft) {
   const { savedKey, ...rest } = JSON.parse(JSON.stringify(draft))
   return rest

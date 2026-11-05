@@ -5,7 +5,7 @@ import { ref, computed } from 'vue'
 import { t } from '../i18n.js'
 import { state, refreshSettings } from '../state.js'
 import { searchBuyers, resolveBuyer } from '../lib/buyers.js'
-import { BUYER_ID_TYPES } from '../sri/catalog.js'
+import { buyerIdType } from '../sri/catalog.js'
 import BuyerForm from './BuyerForm.vue'
 
 const props = defineProps({
@@ -21,8 +21,9 @@ const query = ref('')
 
 const selected = computed(() => resolveBuyer(props.modelValue, state.buyers))
 const matches = computed(() => searchBuyers(state.buyers, query.value).slice(0, 30))
-const idTypeLabel = (code) => t(`idTypes.${BUYER_ID_TYPES.find((it) => it.code === code).key}`)
+const idTypeLabel = (/** @type {string} */ code) => t(`idTypes.${buyerIdType(code).key}`)
 
+/** @param {string} key */
 function choose (key) {
   emit('update:modelValue', key)
   open.value = false
@@ -30,6 +31,7 @@ function choose (key) {
   query.value = ''
 }
 
+/** @param {import('../types').StoredBuyer} buyer */
 async function onCreated (buyer) {
   await refreshSettings()
   choose(buyer.key)

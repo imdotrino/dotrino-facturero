@@ -20,6 +20,7 @@ export const ENVIRONMENTS = Object.freeze({ test: '1', production: '2' })
 
 const EMISSION_NORMAL = '1'
 
+/** @param {string} digits */
 export function mod11 (digits) {
   if (!/^\d+$/.test(digits)) throw codeError('bad-digits', `mod11 needs digits, got «${digits}»`)
   let sum = 0
@@ -39,7 +40,7 @@ export function mod11 (digits) {
  * @param {Date|string} p.date       fecha de emisión (Date, o 'dd/mm/aaaa')
  * @param {string} p.docType         '01' factura…
  * @param {string} p.ruc             13 dígitos
- * @param {'1'|'2'} p.environment    1 pruebas, 2 producción
+ * @param {string} p.environment    '1' pruebas, '2' producción (se comprueba)
  * @param {string} p.establishment   3 dígitos
  * @param {string} p.emissionPoint   3 dígitos
  * @param {string|number} p.sequential hasta 9 dígitos
@@ -64,6 +65,7 @@ export function buildAccessKey (p) {
 }
 
 /** Descompone una clave de acceso y comprueba su dígito verificador. */
+/** @param {string} key */
 export function parseAccessKey (key) {
   if (!/^\d{49}$/.test(key)) throw codeError('bad-access-key', `access key must be 49 digits, got «${key}»`)
   const valid = mod11(key.slice(0, 48)) === Number(key[48])
@@ -82,17 +84,24 @@ export function parseAccessKey (key) {
   }
 }
 
+/** @param {Date} d */
 export function ddmmyyyy (d) {
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) throw codeError('bad-date', `not a valid date: ${d}`)
   return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + d.getFullYear()
 }
 
+/**
+ * @param {unknown} value
+ * @param {number} len
+ * @param {string} name
+ */
 function exact (value, len, name) {
   const s = String(value ?? '')
   if (s.length !== len || !/^\d+$/.test(s)) throw codeError('bad-' + name, `${name} must be ${len} digits, got «${s}»`)
   return s
 }
 
+/** @param {number} n */
 function randomDigits (n) {
   const bytes = crypto.getRandomValues(new Uint8Array(n))
   return Array.from(bytes, (b) => String(b % 10)).join('')

@@ -8,6 +8,11 @@
 import { codeError } from '../lib/errors.js'
 const SCALE = 1_000_000n
 
+/**
+ * @param {unknown} value  texto o número
+ * @param {{ field?: string }} [opts]
+ * @returns {bigint}  en millonésimas
+ */
 export function parseDecimal (value, { field = 'value' } = {}) {
   const s = typeof value === 'number' ? numberToString(value) : String(value ?? '').trim().replace(',', '.')
   if (!/^\d+(\.\d{1,6})?$/.test(s)) throw codeError('bad-decimal', `${field}: «${value}» is not a non-negative decimal with up to 6 places`)
@@ -16,21 +21,37 @@ export function parseDecimal (value, { field = 'value' } = {}) {
 }
 
 /** Producto de dos valores escalados, redondeado a 6 decimales. */
+/**
+ * @param {bigint} a
+ * @param {bigint} b
+ */
 export function mul (a, b) {
   return divRound(a * b, SCALE)
 }
 
 /** Redondea un valor escalado a `places` decimales (sigue escalado). */
+/**
+ * @param {bigint} value
+ * @param {number} places
+ */
 export function round (value, places) {
   const step = 10n ** BigInt(6 - places)
   return divRound(value, step) * step
 }
 
 /** Porcentaje: base × tarifa / 100, redondeado a 2 decimales. */
+/**
+ * @param {bigint} base
+ * @param {bigint} rate
+ */
 export function percent (base, rate) {
   return round(divRound(base * rate, 100n * SCALE), 2)
 }
 
+/**
+ * @param {bigint} value
+ * @param {number} places
+ */
 export function format (value, places) {
   const r = round(value, places)
   const int = r / SCALE
@@ -38,15 +59,21 @@ export function format (value, places) {
   return places > 0 ? `${int}.${frac}` : `${int}`
 }
 
+/** @param {bigint[]} values */
 export function sum (values) {
   return values.reduce((a, b) => a + b, 0n)
 }
 
+/**
+ * @param {bigint} n
+ * @param {bigint} d
+ */
 function divRound (n, d) {
   if (n < 0n) throw codeError('negative-amount', 'amounts cannot be negative')
   return (n + d / 2n) / d
 }
 
+/** @param {number} n */
 function numberToString (n) {
   if (!Number.isFinite(n)) return String(n)
   // toFixed evita la notación científica de números pequeños (1e-7).

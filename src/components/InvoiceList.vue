@@ -10,11 +10,15 @@ import { ecuadorMonth, shiftMonth } from '../lib/dates.js'
 import { gunzipText, downloadBlob } from '../lib/bytes.js'
 import { zipStore } from '../lib/zip.js'
 import { money } from '../lib/format.js'
+import { codeOf } from '../lib/errors.js'
+
+/** @typedef {import('../types').Invoice} Invoice */
+/** @typedef {import('../types').Draft} Draft */
 
 const emit = defineEmits(['open', 'new', 'settings'])
 
 const month = ref(ecuadorMonth())
-const invoices = ref([])
+const invoices = ref(/** @type {Invoice[]} */ ([]))
 const loading = ref(false)
 const query = ref('')
 const issuerFilter = ref('')   // '' = todos los emisores
@@ -39,33 +43,39 @@ const authorized = computed(() => invoices.value.filter((i) => i.status === 'aut
 
 const removing = ref('')   // clave del borrador que pide confirmar que se quita
 
+/** @param {Draft} d */
 function draftBuyer (d) {
   return resolveBuyer(d.buyerKey, state.buyers)?.name || '—'
 }
 
+/** @param {Draft} d */
 function draftLines (d) {
   return (d.lines || []).map((l) => l.description.trim()).filter(Boolean).join(' · ')
 }
 
+/** @param {Draft} d */
 function draftIssuer (d) {
   const i = state.issuers.find((x) => x.id === d.issuerId)
   return i ? issuerName(i) : ''
 }
 
+/** @param {Draft} d */
 function draftTotal (d) {
   const b = resolveBuyer(d.buyerKey, state.buyers)
   try {
     return money(computeInvoice({ ...d, buyer: b ? buyerSnapshot(b) : {} }).total)
   } catch (e) {
-    if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(e.code)) throw e
+    if (!['bad-decimal', 'discount-exceeds', 'unknown-vat-code'].includes(codeOf(e) ?? '')) throw e
     return '—'
   }
 }
 
+/** @param {number} ms */
 function savedAt (ms) {
   return formatDate(ms, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' })
 }
 
+/** @param {import('../types').SavedDraft} saved */
 async function resume (saved) {
   try {
     await resumeSavedDraft(saved)
@@ -77,6 +87,7 @@ async function resume (saved) {
   }
 }
 
+/** @param {string} key */
 async function removeDraft (key) {
   removing.value = ''
   try {
@@ -88,6 +99,7 @@ async function removeDraft (key) {
   }
 }
 
+/** @param {Invoice} i */
 function buyerName (i) {
   return i.draft.buyer.idType === '07' ? 'CONSUMIDOR FINAL' : i.draft.buyer.name
 }
@@ -109,6 +121,7 @@ async function downloadMonth () {
     // Una carpeta por RUC y ambiente: las de pruebas no se mezclan con las que valen.
     const files = []
     for (const inv of authorized.value) {
+      if (!inv.authorizedXmlGz) throw new Error(`authorized invoice ${inv.accessKey} without its XML`)
       const folder = `${inv.issuer.ruc}_${inv.environment === '2' ? 'produccion' : 'pruebas'}`
       files.push({ name: `${folder}/${inv.number}_${inv.accessKey}.xml`, data: await gunzipText(inv.authorizedXmlGz), date: new Date(inv.createdAt) })
     }

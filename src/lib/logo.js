@@ -5,7 +5,7 @@
 // mejor que una de 600 px. Se dibuja sobre blanco —el papel es blanco— y se guarda en el
 // formato que menos pese de los que el navegador sepa escribir.
 
-import { codeError } from './errors.js'
+import { codeError, messageOf } from './errors.js'
 export const LOGO_TYPES = Object.freeze(['image/png', 'image/jpeg', 'image/webp'])
 export const LOGO_MAX_FILE_BYTES = 5 * 1024 * 1024
 /** Lo que puede ocupar el logo ya reducido (su data URL). */
@@ -14,6 +14,10 @@ const MAX_WIDTH = 600
 const MAX_HEIGHT = 300
 
 /** Lee la imagen, la reduce y devuelve `{ dataUrl, width, height }`. Lanza con `code`. */
+/**
+ * @param {File} file
+ * @returns {Promise<import('../types').Logo>}
+ */
 export async function prepareLogo (file) {
   if (!LOGO_TYPES.includes(file.type)) throw codeError('logo-bad-type', `unsupported logo type: ${file.type || 'unknown'}`)
   if (file.size > LOGO_MAX_FILE_BYTES) throw codeError('logo-file-too-large', `logo file is ${file.size} bytes`)
@@ -21,7 +25,7 @@ export async function prepareLogo (file) {
   try {
     bitmap = await createImageBitmap(file)
   } catch (e) {
-    throw codeError('logo-unreadable', `the image could not be read: ${e.message}`)
+    throw codeError('logo-unreadable', `the image could not be read: ${messageOf(e)}`)
   }
   const scale = Math.min(1, MAX_WIDTH / bitmap.width, MAX_HEIGHT / bitmap.height)
   const width = Math.max(1, Math.round(bitmap.width * scale))
@@ -30,11 +34,14 @@ export async function prepareLogo (file) {
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
+  if (!ctx) throw codeError('logo-unreadable', 'this browser cannot draw on a canvas')
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
-  for (const [type, quality] of [['image/png'], ['image/webp', 0.9], ['image/jpeg', 0.9], ['image/webp', 0.7], ['image/jpeg', 0.7]]) {
+  /** @type {Array<[string, number?]>} */
+  const attempts = [['image/png'], ['image/webp', 0.9], ['image/jpeg', 0.9], ['image/webp', 0.7], ['image/jpeg', 0.7]]
+  for (const [type, quality] of attempts) {
     const dataUrl = canvas.toDataURL(type, quality)
     // Un navegador que no sabe escribir ese formato devuelve PNG: no cuenta como intento.
     if (!dataUrl.startsWith(`data:${type}`)) continue

@@ -8,7 +8,7 @@ import { readyIssuers } from './lib/issuers.js'
 import { getStore } from './services/store.js'
 import { errorText } from './i18n.js'
 
-export const state = reactive({
+export const state = reactive(/** @type {import('./types').AppState} */ ({
   booting: true,
   bootError: null,
   issuers: [],
@@ -23,7 +23,7 @@ export const state = reactive({
   // Sube cuando llegan facturas de la bóveda: la lista la mira para recargarse.
   invoicesVersion: 0,
   toast: null,
-})
+}))
 
 /** Emisores con los que se puede facturar ahora mismo (datos completos y firma cargada). */
 export function usableIssuers () {
@@ -47,6 +47,7 @@ export async function boot () {
 
 let watching = false
 
+/** @param {import('@dotrino/store').Store} store */
 function watchBackup (store) {
   state.backup = store.vault
   if (watching) return
@@ -90,7 +91,12 @@ onSignerChange(() => {
   storedSignatures().then((s) => { state.signatures = s }).catch((e) => toast(errorText(e), 'error'))
 })
 
-let toastTimer = null
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let toastTimer
+/**
+ * @param {string} message
+ * @param {string} [kind]  'info' | 'error' | …
+ */
 export function toast (message, kind = 'info') {
   state.toast = { message, kind }
   clearTimeout(toastTimer)

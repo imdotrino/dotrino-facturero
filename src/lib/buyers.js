@@ -15,8 +15,14 @@
 import { cleanText, isCedula, isRuc, splitEmails, joinEmails, emailProblem } from '../sri/invoice.js'
 import { FINAL_CONSUMER_ID, FINAL_CONSUMER_NAME } from '../sri/catalog.js'
 
+/** @typedef {import('../types').Buyer} Buyer */
+/** @typedef {import('../types').Problem} Problem */
+
 export const FINAL_CONSUMER_KEY = 'final-consumer'
 
+/** @typedef {import('../types').StoredBuyer} StoredBuyer */
+
+/** @type {Readonly<StoredBuyer>} */
 export const FINAL_CONSUMER = Object.freeze({
   key: FINAL_CONSUMER_KEY,
   idType: '07',
@@ -27,11 +33,16 @@ export const FINAL_CONSUMER = Object.freeze({
   address: '',
 })
 
+/** @type {Readonly<Buyer>} */
 export const EMPTY_BUYER = Object.freeze({ idType: '05', id: '', name: '', email: '', phone: '', address: '' })
 
 /** Los tipos que se pueden registrar: todos menos consumidor final, que es fijo. */
 export const REGISTRABLE_ID_TYPES = Object.freeze(['05', '04', '06', '08'])
 
+/**
+ * @param {Buyer} b
+ * @returns {Buyer}
+ */
 export function normalizeBuyer (b) {
   return {
     ...(b.key ? { key: b.key } : {}),
@@ -45,16 +56,24 @@ export function normalizeBuyer (b) {
 }
 
 /** Varios correos bien escritos quedan como «a@b.com, c@d.com»; si alguno falla se deja tal cual, para señalarlo. */
+/** @param {string} text */
 function tidyEmails (text) {
   const { valid, invalid } = splitEmails(text)
   return invalid.length ? cleanText(text) : joinEmails(valid)
 }
 
 /** Lo que impide registrar un comprador. `[{ path, code }]`. */
+/**
+ * @param {Buyer} buyer
+ * @param {Buyer[]} [buyers]
+ * @returns {Problem[]}
+ */
 export function buyerProblems (buyer, buyers = []) {
   const b = normalizeBuyer(buyer)
+  /** @type {Problem[]} */
   const problems = []
-  const add = (path, code) => problems.push({ path, code })
+  /** @type {import('../types').AddProblem} */
+  const add = (path, code) => { problems.push({ path, code }) }
   if (!REGISTRABLE_ID_TYPES.includes(b.idType)) add('buyer.idType', 'required')
   if (b.idType === '05' && !isCedula(b.id)) add('buyer.id', 'bad-cedula')
   else if (b.idType === '04' && !isRuc(b.id)) add('buyer.id', 'bad-ruc')
@@ -69,12 +88,22 @@ export function buyerProblems (buyer, buyers = []) {
 }
 
 /** El comprador de una clave, o null si ya no existe. */
+/**
+ * @param {string} key
+ * @param {StoredBuyer[]} buyers
+ * @returns {Readonly<StoredBuyer> | null}
+ */
 export function resolveBuyer (key, buyers) {
   if (key === FINAL_CONSUMER_KEY) return FINAL_CONSUMER
   return buyers.find((b) => b.key === key) || null
 }
 
 /** Búsqueda por nombre, identificación o correo; consumidor final siempre primero. */
+/**
+ * @param {StoredBuyer[]} buyers
+ * @param {string} query
+ * @returns {Array<Readonly<StoredBuyer>>}
+ */
 export function searchBuyers (buyers, query) {
   const q = cleanText(query).toLowerCase()
   const matches = buyers
@@ -85,6 +114,10 @@ export function searchBuyers (buyers, query) {
 }
 
 /** Los datos del comprador que se copian en la factura (sin la clave del registro). */
+/**
+ * @param {Readonly<Buyer>} buyer
+ * @returns {Omit<Buyer, 'key'>}
+ */
 export function buyerSnapshot (buyer) {
   const { key, ...data } = buyer
   return { ...data }

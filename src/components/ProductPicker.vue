@@ -9,7 +9,7 @@ import { money } from '../lib/format.js'
 
 const emit = defineEmits(['choose', 'close'])
 const query = ref('')
-const input = ref(null)
+const input = ref(/** @type {HTMLInputElement | null} */ (null))
 const matches = computed(() => searchProducts(state.products, query.value).slice(0, 30))
 nextTick(() => input.value?.focus())
 </script>
